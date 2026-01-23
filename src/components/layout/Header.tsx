@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Database } from '@/lib/supabase'
+import logoImage from '@/assets/Logo.png'
 
 type Company = Database['public']['Tables']['companies']['Row']
 
@@ -42,19 +43,17 @@ export function Header() {
     <header className="sticky top-0 z-30 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between px-4 lg:px-8">
         <div className="flex items-center gap-2">
-          {company?.logo_url && (
-            <img
-              src={company.logo_url}
-              alt={company.name}
-              className="h-8 w-8 rounded"
-            />
+          <img
+            src={company?.logo_url || logoImage}
+            alt={company?.name || 'Facturation'}
+            className="h-12 w-auto object-contain"
+          />
+          {company?.name && (
+            <div>
+              <h2 className="text-sm font-semibold">{company.name}</h2>
+              <p className="text-xs text-muted-foreground">Invoice Management</p>
+            </div>
           )}
-          <div>
-            <h2 className="text-sm font-semibold">
-              {loading ? 'Loading...' : company?.name || 'Facturation'}
-            </h2>
-            <p className="text-xs text-muted-foreground">Invoice Management</p>
-          </div>
         </div>
         <div className="flex items-center gap-4">
           <DropdownMenu>

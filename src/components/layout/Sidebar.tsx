@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
+import logoImage from '@/assets/Logo.png'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -47,8 +48,12 @@ export function Sidebar() {
         )}
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-center h-16 border-b border-border px-4 bg-gradient-to-r from-[#a0302a] to-[#8a2520]">
-            <h1 className="text-xl font-bold text-white">Facturation</h1>
+          <div className="flex items-center justify-center h-16 border-b border-border px-4 bg-card">
+            <img
+              src={logoImage}
+              alt="Facturation"
+              className="h-18 w-auto object-contain"
+            />
           </div>
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navigation.map((item) => {
