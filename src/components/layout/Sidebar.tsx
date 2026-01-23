@@ -47,8 +47,8 @@ export function Sidebar() {
         )}
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-center h-16 border-b border-border px-4">
-            <h1 className="text-xl font-bold">Facturation</h1>
+          <div className="flex items-center justify-center h-16 border-b border-border px-4 bg-gradient-to-r from-[#a0302a] to-[#8a2520]">
+            <h1 className="text-xl font-bold text-white">Facturation</h1>
           </div>
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navigation.map((item) => {
@@ -62,8 +62,8 @@ export function Sidebar() {
                   className={cn(
                     'flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      ? 'bg-[#a0302a] text-white shadow-md'
+                      : 'text-muted-foreground hover:bg-gray-100 hover:text-[#a0302a]'
                   )}
                 >
                   <Icon className="h-5 w-5" />

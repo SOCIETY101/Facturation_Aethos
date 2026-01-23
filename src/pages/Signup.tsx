@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import Logo from '@/assets/Logo.png'
 
 export default function Signup() {
   const [email, setEmail] = useState('')
@@ -102,78 +103,121 @@ export default function Signup() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-muted/50">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
-          <CardDescription>Enter your information to create a new account</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name</Label>
-              <Input
-                id="fullName"
-                type="text"
-                placeholder="John Doe"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="companyName">Company Name</Label>
-              <Input
-                id="companyName"
-                type="text"
-                placeholder="My Company SARL"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                disabled={isLoading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Password must be at least 6 characters
-              </p>
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Account
-            </Button>
-          </form>
-          <div className="mt-4 text-center text-sm">
-            Already have an account?{' '}
-            <Link to="/login" className="text-primary hover:underline">
-              Sign in
-            </Link>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 py-8">
+      <div className="w-full max-w-md px-4">
+        {/* Logo Section */}
+        <div className="flex justify-center mb-8">
+          <div className="flex items-center gap-3">
+            <img 
+              src={Logo} 
+              alt="Aethos Logo" 
+              className="h-16 w-auto"
+            />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        <Card className="w-full shadow-xl border-0">
+          <CardHeader className="space-y-3 pb-6">
+            <CardTitle className="text-3xl font-bold text-center text-gray-900">
+              Créer un compte
+            </CardTitle>
+            <CardDescription className="text-center text-gray-600">
+              Entrez vos informations pour créer un nouveau compte
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="fullName" className="text-gray-700 font-medium">
+                  Nom complet
+                </Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="Jean Dupont"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-11 border-gray-300 focus:border-[#a0302a] focus:ring-[#a0302a]"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="companyName" className="text-gray-700 font-medium">
+                  Nom de l'entreprise
+                </Label>
+                <Input
+                  id="companyName"
+                  type="text"
+                  placeholder="Mon Entreprise SARL"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-11 border-gray-300 focus:border-[#a0302a] focus:ring-[#a0302a]"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-gray-700 font-medium">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="nom@exemple.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-11 border-gray-300 focus:border-[#a0302a] focus:ring-[#a0302a]"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-gray-700 font-medium">
+                  Mot de passe
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  disabled={isLoading}
+                  className="h-11 border-gray-300 focus:border-[#a0302a] focus:ring-[#a0302a]"
+                />
+                <p className="text-xs text-gray-500">
+                  Le mot de passe doit contenir au moins 6 caractères
+                </p>
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full h-11 bg-[#a0302a] hover:bg-[#8a2520] text-white font-semibold shadow-md hover:shadow-lg transition-all duration-200" 
+                disabled={isLoading}
+              >
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Créer le compte
+              </Button>
+            </form>
+            <div className="mt-6 text-center text-sm">
+              <span className="text-gray-600">Vous avez déjà un compte? </span>
+              <Link 
+                to="/login" 
+                className="text-[#a0302a] hover:text-[#8a2520] font-semibold hover:underline"
+              >
+                Se connecter
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Footer */}
+        <div className="mt-8 text-center">
+          <p className="text-xs text-gray-500">
+            © 2025 Aethos - L'innovation digitale à 360°
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
