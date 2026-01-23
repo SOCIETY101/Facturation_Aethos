@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import Logo from '@/assets/Logo.png'
 
@@ -31,19 +31,19 @@ export default function Login() {
         {/* Logo Section */}
         <div className="flex justify-center mb-8">
           <div className="flex items-center gap-3">
-            <img 
-              src={Logo} 
-              alt="Aethos Logo" 
-              className="h-16 w-auto"
-            />
+            
           </div>
         </div>
 
         <Card className="w-full shadow-xl border-0">
           <CardHeader className="space-y-3 pb-6">
-            <CardTitle className="text-3xl font-bold text-center text-gray-900">
-              Connexion
-            </CardTitle>
+            <div className="flex justify-center">
+              <img 
+                src={Logo} 
+                alt="Aethos Logo" 
+                className="h-18 w-auto object-contain"
+              />
+            </div>
             <CardDescription className="text-center text-gray-600">
               Entrez vos identifiants pour accéder à votre compte
             </CardDescription>
