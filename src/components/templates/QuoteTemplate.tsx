@@ -1,10 +1,10 @@
-import { Quote, Client } from '@/lib/types'
 import { Database } from '@/lib/supabase'
 import { formatCurrency, formatDateShort } from '@/lib/utils'
 import Logo from '@/assets/Logo.png'
 import Signature from '@/assets/Segnature.png'
 
 type Company = Database['public']['Tables']['companies']['Row']
+type Client = Database['public']['Tables']['clients']['Row']
 type QuoteItem = Database['public']['Tables']['quote_items']['Row']
 
 interface QuoteTemplateProps {
@@ -19,7 +19,7 @@ interface QuoteTemplateProps {
     terms?: string | null
     quote_items: QuoteItem[]
   }
-  client: Client | Database['public']['Tables']['clients']['Row']
+  client: Client
   company: Company
 }
 

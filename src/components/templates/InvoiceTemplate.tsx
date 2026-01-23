@@ -1,10 +1,10 @@
-import { Invoice, Client } from '@/lib/types'
 import { Database } from '@/lib/supabase'
 import { formatCurrency, formatDateShort } from '@/lib/utils'
 import Logo from '@/assets/Logo.png'
 import Signature from '@/assets/Segnature.png'
 
 type Company = Database['public']['Tables']['companies']['Row']
+type Client = Database['public']['Tables']['clients']['Row']
 type InvoiceItem = Database['public']['Tables']['invoice_items']['Row']
 type Payment = Database['public']['Tables']['payments']['Row']
 
@@ -23,7 +23,7 @@ interface InvoiceTemplateProps {
     invoice_items: InvoiceItem[]
     payments?: Payment[]
   }
-  client: Client | Database['public']['Tables']['clients']['Row']
+  client: Client
   company: Company
 }
 
