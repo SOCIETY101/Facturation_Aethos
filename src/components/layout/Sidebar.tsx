@@ -7,6 +7,7 @@ import {
   Settings,
   Menu,
   X,
+  FileCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -17,6 +18,7 @@ const navigation = [
   { name: 'Clients', href: '/clients', icon: Users },
   { name: 'Quotes', href: '/quotes', icon: FileText },
   { name: 'Invoices', href: '/invoices', icon: Receipt },
+  { name: 'Templates', href: '/templates', icon: FileCheck },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
