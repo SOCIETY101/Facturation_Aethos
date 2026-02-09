@@ -43,7 +43,7 @@ export default function QuotePreview() {
     loadData()
   }, [id, user])
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!quote || !company) return
 
     // Convert database format to app format for PDF generation
@@ -100,7 +100,7 @@ export default function QuotePreview() {
       taxRates: [],
     }
 
-    generateQuotePDF(appQuote, appClient, appSettings)
+    await generateQuotePDF(appQuote, appClient, appSettings)
   }
 
   if (loading) {

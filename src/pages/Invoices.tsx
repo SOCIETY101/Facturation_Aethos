@@ -75,7 +75,7 @@ export default function Invoices() {
     return filtered
   }, [invoices, statusFilter, searchQuery, clients])
 
-  const handleDownloadPDF = (invoice: Invoice) => {
+  const handleDownloadPDF = async (invoice: Invoice) => {
     const client = clients.find((c) => c.id === invoice.clientId)
     if (!client) {
       toast({
@@ -86,7 +86,7 @@ export default function Invoices() {
       return
     }
     const settings = useStore.getState().settings
-    generateInvoicePDF(invoice, client, settings)
+    await generateInvoicePDF(invoice, client, settings)
     toast({
       title: 'PDF generated',
       description: 'Invoice PDF has been downloaded.',

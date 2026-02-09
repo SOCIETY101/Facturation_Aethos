@@ -1,345 +1,366 @@
 import jsPDF from 'jspdf'
 import { Invoice, Quote, Client, AppSettings } from './types'
-import { formatCurrency, formatDate } from './utils'
+import { formatCurrency } from './utils'
+import Logo from '@/assets/Logo.png'
+import Signature from '@/assets/Segnature.png'
 
-export function generateInvoicePDF(
+const COLOR_RED = [176, 13, 11] as const
+const COLOR_DARK = [43, 43, 43] as const
+const COLOR_LIGHT_RED = [243, 222, 222] as const
+
+const formatDateNumeric = (date: Date | string): string => {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d)
+}
+
+const loadImageAsDataUrl = async (url: string): Promise<string | null> => {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error('Image load failed'))
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
+const addLogo = async (doc: jsPDF, logoUrl?: string) => {
+  const url = logoUrl || Logo
+  const dataUrl = await loadImageAsDataUrl(url)
+  if (!dataUrl) return
+  doc.addImage(dataUrl, 'PNG', 20, 18, 45, 15)
+}
+
+const addSignature = async (doc: jsPDF, x: number, y: number) => {
+  const dataUrl = await loadImageAsDataUrl(Signature)
+  if (!dataUrl) return
+  doc.addImage(dataUrl, 'PNG', x, y, 40, 20)
+}
+
+const drawPill = (doc: jsPDF, x: number, y: number, w: number, h: number, text: string, fill?: number[], textColor?: number[], stroke?: number[]) => {
+  if (fill) {
+    doc.setFillColor(fill[0], fill[1], fill[2])
+    doc.roundedRect(x, y, w, h, h / 2, h / 2, 'F')
+  }
+  if (stroke) {
+    doc.setDrawColor(stroke[0], stroke[1], stroke[2])
+    doc.roundedRect(x, y, w, h, h / 2, h / 2, 'S')
+  }
+  if (textColor) {
+    doc.setTextColor(textColor[0], textColor[1], textColor[2])
+  } else {
+    doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  }
+  doc.text(text, x + w / 2, y + h / 2 + 2.5, { align: 'center' })
+}
+
+const drawTable = (
+  doc: jsPDF,
+  startY: number,
+  items: { description: string; quantity: number; total: number }[],
+  pageWidth: number,
+  margin: number
+) => {
+  const tableX = margin
+  const tableW = pageWidth - margin * 2
+  const colDesc = tableW * 0.6
+  const colQty = tableW * 0.15
+  const colTotal = tableW * 0.25
+  const headerH = 8
+  let y = startY
+
+  doc.setFillColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.rect(tableX, y, tableW, headerH, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.text('DESCRIPTION', tableX + colDesc / 2, y + 5.5, { align: 'center' })
+  doc.text('QTE', tableX + colDesc + colQty / 2, y + 5.5, { align: 'center' })
+  doc.text('TOTAL TTC', tableX + colDesc + colQty + colTotal / 2, y + 5.5, { align: 'center' })
+
+  y += headerH
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+
+  items.forEach((item) => {
+    const lines = doc.splitTextToSize(item.description, colDesc - 6)
+    const rowH = Math.max(10, lines.length * 5 + 4)
+
+    doc.setDrawColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+    doc.rect(tableX, y, tableW, rowH)
+    doc.line(tableX + colDesc, y, tableX + colDesc, y + rowH)
+    doc.line(tableX + colDesc + colQty, y, tableX + colDesc + colQty, y + rowH)
+
+    doc.text(lines, tableX + 3, y + 6)
+    doc.text(String(item.quantity), tableX + colDesc + colQty / 2, y + 6, { align: 'center' })
+    doc.text(formatCurrency(item.total), tableX + colDesc + colQty + colTotal - 3, y + 6, { align: 'right' })
+
+    y += rowH
+  })
+
+  return { y, tableW, tableX }
+}
+
+export async function generateInvoicePDF(
   invoice: Invoice,
   client: Client,
   settings: AppSettings
-): void {
+): Promise<void> {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 20
-  let yPos = margin
 
-  // Header
-  doc.setFontSize(24)
+  await addLogo(doc, settings.company.logo)
+
+  // Title row
   doc.setFont('helvetica', 'bold')
-  doc.text('FACTURE', pageWidth - margin, yPos, { align: 'right' })
-  yPos += 10
+  doc.setFontSize(20)
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.setFillColor(COLOR_LIGHT_RED[0], COLOR_LIGHT_RED[1], COLOR_LIGHT_RED[2])
+  doc.rect(margin, 40, 28, 10, 'F')
+  doc.text('FACTURE', margin + 1, 48)
 
-  doc.setFontSize(12)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`N° ${invoice.invoiceNumber}`, pageWidth - margin, yPos, { align: 'right' })
-  yPos += 15
-
-  // Company info
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text(settings.company.name, margin, yPos)
-  yPos += 6
   doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.text(settings.company.address, margin, yPos)
-  yPos += 5
-  doc.text(
-    `${settings.company.postalCode} ${settings.company.city}`,
-    margin,
-    yPos
-  )
-  yPos += 5
-  doc.text(settings.company.country, margin, yPos)
-  yPos += 5
-  if (settings.company.taxId) {
-    doc.text(`SIRET: ${settings.company.taxId}`, margin, yPos)
-    yPos += 10
-  } else {
-    yPos += 5
-  }
+  drawPill(doc, pageWidth / 2 - 20, 40, 40, 10, `N°${invoice.invoiceNumber}`, undefined, undefined, COLOR_DARK)
+  drawPill(doc, pageWidth - margin - 35, 40, 35, 10, formatDateNumeric(invoice.date), COLOR_RED, [255, 255, 255])
 
-  // Client info
-  const clientX = pageWidth - margin - 60
-  yPos = margin + 10
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Facturé à:', clientX, yPos)
-  yPos += 6
+  doc.setDrawColor(120)
+  doc.line(margin, 58, pageWidth - margin, 58)
+
+  // Parties
   doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.text(client.name.toUpperCase(), margin, 70)
+  doc.text((settings.company.name || 'AETHOS TECH').toUpperCase(), pageWidth - margin, 70, { align: 'right' })
+
   doc.setFont('helvetica', 'normal')
-  doc.text(client.name, clientX, yPos)
-  yPos += 5
-  doc.text(client.address, clientX, yPos)
-  yPos += 5
+  let leftY = 76
   if (client.taxId) {
-    doc.text(`SIRET: ${client.taxId}`, clientX, yPos)
-    yPos += 5
+    doc.text(`ICE : ${client.taxId}`, margin, leftY)
+    leftY += 5
   }
-  doc.text(client.email, clientX, yPos)
-  yPos += 5
-  doc.text(client.phone, clientX, yPos)
-  yPos += 20
+  if (client.email) {
+    doc.text(client.email, margin, leftY)
+    leftY += 5
+  }
+  if (client.phone) {
+    doc.text(client.phone, margin, leftY)
+  }
 
-  // Invoice details
-  doc.setFontSize(10)
-  doc.text(`Date d'émission: ${formatDate(invoice.date)}`, margin, yPos)
-  yPos += 5
-  doc.text(`Date d'échéance: ${formatDate(invoice.dueDate)}`, margin, yPos)
-  yPos += 10
+  if (settings.company.taxId) {
+    doc.text(`ICE : ${settings.company.taxId}`, pageWidth - margin, 76, { align: 'right' })
+  }
 
-  // Line items table
-  const tableTop = yPos
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Description', margin, yPos)
-  doc.text('Qté', margin + 80, yPos)
-  doc.text('Prix unit.', margin + 100, yPos)
-  doc.text('TVA', margin + 130, yPos)
-  doc.text('Total', pageWidth - margin, yPos, { align: 'right' })
-  yPos += 5
-
-  doc.setLineWidth(0.5)
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 5
-
-  doc.setFont('helvetica', 'normal')
-  invoice.lineItems.forEach((item) => {
+  // Table
+  const items = invoice.lineItems.map((item) => {
     const itemTotal = item.quantity * item.unitPrice
     const itemTax = itemTotal * (item.taxRate / 100)
-    const itemTotalWithTax = itemTotal + itemTax
-
-    doc.text(item.description.substring(0, 30), margin, yPos)
-    doc.text(item.quantity.toString(), margin + 80, yPos)
-    doc.text(formatCurrency(item.unitPrice), margin + 100, yPos)
-    doc.text(`${item.taxRate}%`, margin + 130, yPos)
-    doc.text(formatCurrency(itemTotalWithTax), pageWidth - margin, yPos, {
-      align: 'right',
-    })
-    yPos += 6
+    return {
+      description: item.description,
+      quantity: item.quantity,
+      total: itemTotal + itemTax,
+    }
   })
 
-  yPos += 5
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 10
+  const table = drawTable(doc, 88, items, pageWidth, margin)
 
   // Totals
+  let y = table.y + 10
   doc.setFont('helvetica', 'bold')
-  doc.text('Sous-total HT:', pageWidth - margin - 50, yPos, { align: 'right' })
-  doc.text(formatCurrency(invoice.subtotal), pageWidth - margin, yPos, {
-    align: 'right',
-  })
-  yPos += 6
+  doc.setFontSize(10)
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.text('HT Total :', pageWidth - margin - 40, y, { align: 'right' })
+  doc.text(formatCurrency(invoice.subtotal), pageWidth - margin, y, { align: 'right' })
 
+  y += 8
+  doc.setFillColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.text(`TOTAL TTC : ${formatCurrency(invoice.total)}`, pageWidth - margin - 2, y + 7, { align: 'right' })
+
+  // Payment info
+  y += 16
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.setFont('helvetica', 'bold')
+  doc.text('MODE DE PAIEMENT', margin, y)
   doc.setFont('helvetica', 'normal')
-  doc.text('TVA:', pageWidth - margin - 50, yPos, { align: 'right' })
-  doc.text(formatCurrency(invoice.taxAmount), pageWidth - margin, yPos, {
-    align: 'right',
-  })
-  yPos += 6
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
-  doc.text('Total TTC:', pageWidth - margin - 50, yPos, { align: 'right' })
-  doc.text(formatCurrency(invoice.total), pageWidth - margin, yPos, {
-    align: 'right',
-  })
-  yPos += 15
-
-  // Payments
-  if (invoice.payments.length > 0) {
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Paiements:', margin, yPos)
-    yPos += 6
-    doc.setFont('helvetica', 'normal')
-    invoice.payments.forEach((payment) => {
-      doc.text(
-        `${formatDate(payment.date)} - ${formatCurrency(payment.amount)} (${payment.method})`,
-        margin + 5,
-        yPos
-      )
-      yPos += 5
-    })
-    const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0)
-    const remaining = invoice.total - totalPaid
-    if (remaining > 0) {
-      yPos += 2
-      doc.setFont('helvetica', 'bold')
-      doc.text(`Reste à payer: ${formatCurrency(remaining)}`, margin + 5, yPos)
-      yPos += 10
-    }
+  y += 6
+  doc.text(`INTITULE DU COMPTE : ${settings.company.name || 'STE AETHOS TECH SARL'}`, margin, y)
+  y += 5
+  if (settings.company.bankAccount) {
+    doc.text(`RIB : ${settings.company.bankAccount}`, margin, y)
+    y += 5
+  }
+  if (settings.company.bankIBAN) {
+    doc.text(`IBAN : ${settings.company.bankIBAN}`, margin, y)
+    y += 5
+  }
+  if (settings.company.bankBIC) {
+    doc.text(`CODE SWIFT : ${settings.company.bankBIC}`, margin, y)
+    y += 5
   }
 
-  // Notes
-  if (invoice.notes) {
-    yPos += 5
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'italic')
-    const splitNotes = doc.splitTextToSize(invoice.notes, pageWidth - 2 * margin)
-    doc.text(splitNotes, margin, yPos)
-    yPos += splitNotes.length * 4
-  }
+  // Signature
+  await addSignature(doc, pageWidth - margin - 45, y - 10)
 
   // Footer
-  const footerY = doc.internal.pageSize.getHeight() - 30
+  const footerParts = [
+    settings.company.name || 'STE AETHOS TECH SARL',
+    settings.company.taxId ? `ICE ${settings.company.taxId}` : null,
+    settings.company.address || null,
+    settings.company.city ? `${settings.company.city}${settings.company.postalCode ? ` ${settings.company.postalCode}` : ''}` : null,
+  ].filter(Boolean) as string[]
+
   doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.text(
-    `Banque: ${settings.company.bankName} - IBAN: ${settings.company.bankIBAN} - BIC: ${settings.company.bankBIC}`,
-    margin,
-    footerY
-  )
-  yPos += 5
-  if (settings.invoice.terms) {
-    const splitTerms = doc.splitTextToSize(
-      settings.invoice.terms,
-      pageWidth - 2 * margin
-    )
-    doc.text(splitTerms, margin, footerY + 5)
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.setDrawColor(160)
+  doc.line(margin, pageHeight - 18, pageWidth - margin, pageHeight - 18)
+  if (footerParts.length > 0) {
+    doc.text(footerParts.join(' - '), pageWidth / 2, pageHeight - 12, { align: 'center' })
   }
 
   doc.save(`invoice-${invoice.invoiceNumber}.pdf`)
 }
 
-export function generateQuotePDF(
+export async function generateQuotePDF(
   quote: Quote,
   client: Client,
   settings: AppSettings
-): void {
+): Promise<void> {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 20
-  let yPos = margin
 
-  // Header
-  doc.setFontSize(24)
+  await addLogo(doc, settings.company.logo)
+
+  // Title row
   doc.setFont('helvetica', 'bold')
-  doc.text('DEVIS', pageWidth - margin, yPos, { align: 'right' })
-  yPos += 10
+  doc.setFontSize(20)
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.setFillColor(COLOR_LIGHT_RED[0], COLOR_LIGHT_RED[1], COLOR_LIGHT_RED[2])
+  doc.rect(margin, 40, 22, 10, 'F')
+  doc.text('DEVIS', margin + 1, 48)
 
-  doc.setFontSize(12)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`N° ${quote.quoteNumber}`, pageWidth - margin, yPos, { align: 'right' })
-  yPos += 15
-
-  // Company info
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text(settings.company.name, margin, yPos)
-  yPos += 6
   doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.text(settings.company.address, margin, yPos)
-  yPos += 5
-  doc.text(
-    `${settings.company.postalCode} ${settings.company.city}`,
-    margin,
-    yPos
+  drawPill(doc, pageWidth / 2 - 20, 40, 40, 10, `N°${quote.quoteNumber}`, undefined, undefined, COLOR_DARK)
+  drawPill(doc, pageWidth - margin - 35, 40, 35, 10, formatDateNumeric(quote.date), COLOR_RED, [255, 255, 255])
+
+  const validText = `Valable jusqu'au ${formatDateNumeric(quote.validUntil)}`
+  doc.setFontSize(8)
+  const validW = doc.getTextWidth(validText) + 6
+  drawPill(
+    doc,
+    pageWidth - margin - validW,
+    52,
+    validW,
+    8,
+    validText,
+    undefined,
+    undefined,
+    COLOR_DARK
   )
-  yPos += 5
-  doc.text(settings.company.country, margin, yPos)
-  yPos += 5
-  if (settings.company.taxId) {
-    doc.text(`SIRET: ${settings.company.taxId}`, margin, yPos)
-    yPos += 10
-  } else {
-    yPos += 5
-  }
 
-  // Client info
-  const clientX = pageWidth - margin - 60
-  yPos = margin + 10
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Devis pour:', clientX, yPos)
-  yPos += 6
+  doc.setDrawColor(120)
+  doc.line(margin, 62, pageWidth - margin, 62)
+
+  // Parties
   doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.text(client.name.toUpperCase(), margin, 74)
+  doc.text((settings.company.name || 'AETHOS TECH').toUpperCase(), pageWidth - margin, 74, { align: 'right' })
+
   doc.setFont('helvetica', 'normal')
-  doc.text(client.name, clientX, yPos)
-  yPos += 5
-  doc.text(client.address, clientX, yPos)
-  yPos += 5
+  let leftY = 80
   if (client.taxId) {
-    doc.text(`SIRET: ${client.taxId}`, clientX, yPos)
-    yPos += 5
+    doc.text(`ICE : ${client.taxId}`, margin, leftY)
+    leftY += 5
   }
-  doc.text(client.email, clientX, yPos)
-  yPos += 5
-  doc.text(client.phone, clientX, yPos)
-  yPos += 20
+  if (client.email) {
+    doc.text(client.email, margin, leftY)
+    leftY += 5
+  }
+  if (client.phone) {
+    doc.text(client.phone, margin, leftY)
+  }
 
-  // Quote details
-  doc.setFontSize(10)
-  doc.text(`Date: ${formatDate(quote.date)}`, margin, yPos)
-  yPos += 5
-  doc.text(`Valide jusqu'au: ${formatDate(quote.validUntil)}`, margin, yPos)
-  yPos += 10
+  if (settings.company.taxId) {
+    doc.text(`ICE : ${settings.company.taxId}`, pageWidth - margin, 80, { align: 'right' })
+  }
 
-  // Line items table
-  const tableTop = yPos
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Description', margin, yPos)
-  doc.text('Qté', margin + 80, yPos)
-  doc.text('Prix unit.', margin + 100, yPos)
-  doc.text('TVA', margin + 130, yPos)
-  doc.text('Total', pageWidth - margin, yPos, { align: 'right' })
-  yPos += 5
-
-  doc.setLineWidth(0.5)
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 5
-
-  doc.setFont('helvetica', 'normal')
-  quote.lineItems.forEach((item) => {
+  // Table
+  const items = quote.lineItems.map((item) => {
     const itemTotal = item.quantity * item.unitPrice
     const itemTax = itemTotal * (item.taxRate / 100)
-    const itemTotalWithTax = itemTotal + itemTax
-
-    doc.text(item.description.substring(0, 30), margin, yPos)
-    doc.text(item.quantity.toString(), margin + 80, yPos)
-    doc.text(formatCurrency(item.unitPrice), margin + 100, yPos)
-    doc.text(`${item.taxRate}%`, margin + 130, yPos)
-    doc.text(formatCurrency(itemTotalWithTax), pageWidth - margin, yPos, {
-      align: 'right',
-    })
-    yPos += 6
+    return {
+      description: item.description,
+      quantity: item.quantity,
+      total: itemTotal + itemTax,
+    }
   })
 
-  yPos += 5
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 10
+  const table = drawTable(doc, 92, items, pageWidth, margin)
 
   // Totals
+  let y = table.y + 10
   doc.setFont('helvetica', 'bold')
-  doc.text('Sous-total HT:', pageWidth - margin - 50, yPos, { align: 'right' })
-  doc.text(formatCurrency(quote.subtotal), pageWidth - margin, yPos, {
-    align: 'right',
-  })
-  yPos += 6
+  doc.setFontSize(10)
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.text('HT Total :', pageWidth - margin - 40, y, { align: 'right' })
+  doc.text(formatCurrency(quote.subtotal), pageWidth - margin, y, { align: 'right' })
 
-  doc.setFont('helvetica', 'normal')
-  doc.text('TVA:', pageWidth - margin - 50, yPos, { align: 'right' })
-  doc.text(formatCurrency(quote.taxAmount), pageWidth - margin, yPos, {
-    align: 'right',
-  })
-  yPos += 6
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
-  doc.text('Total TTC:', pageWidth - margin - 50, yPos, { align: 'right' })
-  doc.text(formatCurrency(quote.total), pageWidth - margin, yPos, {
-    align: 'right',
-  })
-  yPos += 15
+  y += 8
+  doc.setFillColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.text(`TOTAL TTC : ${formatCurrency(quote.total)}`, pageWidth - margin - 2, y + 7, { align: 'right' })
 
   // Notes
+  y += 14
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.setFont('helvetica', 'normal')
   if (quote.notes) {
-    yPos += 5
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'italic')
-    const splitNotes = doc.splitTextToSize(quote.notes, pageWidth - 2 * margin)
-    doc.text(splitNotes, margin, yPos)
+    doc.text('Notes', margin, y)
+    y += 5
+    const splitNotes = doc.splitTextToSize(quote.notes, pageWidth - margin * 2)
+    doc.text(splitNotes, margin, y)
+    y += splitNotes.length * 4 + 2
+  }
+
+  if (quote.terms) {
+    doc.text('Conditions', margin, y)
+    y += 5
+    const splitTerms = doc.splitTextToSize(quote.terms, pageWidth - margin * 2)
+    doc.text(splitTerms, margin, y)
   }
 
   // Footer
-  const footerY = doc.internal.pageSize.getHeight() - 20
+  const footerParts = [
+    settings.company.name || 'STE AETHOS TECH SARL',
+    settings.company.taxId ? `ICE ${settings.company.taxId}` : null,
+    settings.company.address || null,
+    settings.company.city ? `${settings.company.city}${settings.company.postalCode ? ` ${settings.company.postalCode}` : ''}` : null,
+  ].filter(Boolean) as string[]
+
   doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.text(
-    `Ce devis est valable jusqu'au ${formatDate(quote.validUntil)}`,
-    margin,
-    footerY
-  )
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.setDrawColor(160)
+  doc.line(margin, pageHeight - 18, pageWidth - margin, pageHeight - 18)
+  if (footerParts.length > 0) {
+    doc.text(footerParts.join(' - '), pageWidth / 2, pageHeight - 12, { align: 'center' })
+  }
 
   doc.save(`quote-${quote.quoteNumber}.pdf`)
 }

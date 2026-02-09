@@ -44,7 +44,7 @@ export default function InvoicePreview() {
     loadData()
   }, [id, user])
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!invoice || !company) return
 
     // Convert database format to app format for PDF generation
@@ -108,7 +108,7 @@ export default function InvoicePreview() {
       taxRates: [],
     }
 
-    generateInvoicePDF(appInvoice, appClient, appSettings)
+    await generateInvoicePDF(appInvoice, appClient, appSettings)
   }
 
   if (loading) {

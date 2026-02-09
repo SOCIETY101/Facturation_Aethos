@@ -1,5 +1,5 @@
 import { Database } from '@/lib/supabase'
-import { formatCurrency, formatDateShort } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
 import Logo from '@/assets/Logo.png'
 import Signature from '@/assets/Segnature.png'
 
@@ -27,100 +27,105 @@ interface InvoiceTemplateProps {
   company: Company
 }
 
+const formatDateNumeric = (date: string | Date) => {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d)
+}
+
 export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplateProps) {
   const totalPaid = invoice.payments?.reduce((sum, p) => sum + p.amount, 0) || invoice.paid_amount || 0
   const remaining = invoice.total - totalPaid
 
+  const footerParts = [
+    company.name || 'STE AETHOS TECH SARL',
+    company.tax_id ? `ICE ${company.tax_id}` : null,
+    company.address || null,
+    company.city ? `${company.city}${company.postal_code ? ` ${company.postal_code}` : ''}` : null,
+  ].filter(Boolean) as string[]
+
   return (
-    <div className="min-h-screen bg-white p-8 print:p-4">
+    <div className="min-h-screen bg-white p-10 print:p-6 text-[#2b2b2b]">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-8">
-          <div className="flex items-center gap-4">
+        {/* Logo */}
+        <div className="flex items-start justify-between">
+          <div className="flex items-start gap-4">
             {company.logo_url && (
-              <img 
-                src={company.logo_url} 
-                alt={company.name}
-                className="h-20 w-auto"
+              <img
+                src={company.logo_url}
+                alt={company.name || 'Logo'}
+                className="h-16 w-auto"
               />
             )}
             {!company.logo_url && (
-              <img 
-                src={Logo} 
+              <img
+                src={Logo}
                 alt="Logo"
-                className="h-20 w-auto"
+                className="h-16 w-auto"
               />
             )}
-            <div>
-              <h1 className="text-2xl font-bold text-[#1e3a8a]">{company.name || 'STE AETHOS TECH SARL'}</h1>
-              {company.tax_id && (
-                <p className="text-sm text-gray-600">ICE: {company.tax_id}</p>
-              )}
-              {company.address && (
-                <p className="text-sm text-gray-600">{company.address}</p>
-              )}
-              {company.city && company.postal_code && (
-                <p className="text-sm text-gray-600">{company.postal_code} {company.city}</p>
-              )}
-            </div>
-          </div>
-          <div className="text-right">
-            <h2 className="text-3xl font-bold text-[#1e3a8a] mb-2">FACTURE</h2>
-            <p className="text-lg text-gray-700">N° {invoice.invoice_number}</p>
           </div>
         </div>
 
-        {/* Client Info */}
-        <div className="mb-8 p-4 bg-gray-50 rounded-lg">
-          <h3 className="text-lg font-semibold text-[#1e3a8a] mb-3">Facturé à:</h3>
-          <div className="text-gray-700">
-            <p className="font-semibold">{client.name}</p>
-            {client.address && <p>{client.address}</p>}
-            {client.city && client.postal_code && (
-              <p>{client.postal_code} {client.city}</p>
-            )}
-            {client.tax_id && <p>ICE: {client.tax_id}</p>}
+        {/* Title Row */}
+        <div className="mt-6 flex items-center justify-between gap-4">
+          <div className="flex items-center">
+            <span className="bg-[#b00d0b]/15 px-2 py-1 text-2xl font-bold tracking-wide">
+              FACTURE
+            </span>
+          </div>
+          <div className="flex-1 flex justify-center">
+            <span className="border-2 border-[#2b2b2b] rounded-full px-4 py-1 text-sm font-semibold">
+              N°{invoice.invoice_number}
+            </span>
+          </div>
+          <div>
+            <span className="bg-[#b00d0b] text-white rounded-full px-4 py-1 text-sm font-semibold">
+              {formatDateNumeric(invoice.date)}
+            </span>
+          </div>
+        </div>
+
+        <div className="my-6 h-px bg-[#2b2b2b]/40" />
+
+        {/* Parties */}
+        <div className="flex justify-between gap-8 text-sm">
+          <div>
+            <p className="font-semibold uppercase">{client.name}</p>
+            {client.tax_id && <p>ICE : {client.tax_id}</p>}
             {client.email && <p>{client.email}</p>}
             {client.phone && <p>{client.phone}</p>}
           </div>
-        </div>
-
-        {/* Invoice Details */}
-        <div className="mb-6 grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="font-semibold text-[#1e3a8a]">Date d'émission:</span>{' '}
-            <span className="text-gray-700">{formatDateShort(invoice.date)}</span>
-          </div>
-          <div>
-            <span className="font-semibold text-[#1e3a8a]">Date d'échéance:</span>{' '}
-            <span className="text-gray-700">{formatDateShort(invoice.due_date)}</span>
+          <div className="text-right">
+            <p className="font-semibold uppercase">{company.name || 'AETHOS TECH'}</p>
+            {company.tax_id && <p>ICE : {company.tax_id}</p>}
+            {company.email && <p>{company.email}</p>}
           </div>
         </div>
 
-        {/* Line Items Table */}
-        <div className="mb-6 overflow-x-auto">
-          <table className="w-full border-collapse">
+        {/* Line Items */}
+        <div className="mt-6">
+          <table className="w-full border border-[#2b2b2b] border-collapse text-sm">
             <thead>
-              <tr className="bg-[#1e3a8a] text-white">
-                <th className="border border-gray-300 px-4 py-3 text-left">Description</th>
-                <th className="border border-gray-300 px-4 py-3 text-center w-20">Qté</th>
-                <th className="border border-gray-300 px-4 py-3 text-right w-32">Prix unit.</th>
-                <th className="border border-gray-300 px-4 py-3 text-center w-24">TVA</th>
-                <th className="border border-gray-300 px-4 py-3 text-right w-32">Total</th>
+              <tr className="bg-[#2b2b2b] text-white">
+                <th className="border border-[#2b2b2b] px-3 py-2 text-center">DESCRIPTION</th>
+                <th className="border border-[#2b2b2b] px-3 py-2 text-center w-28">QTE</th>
+                <th className="border border-[#2b2b2b] px-3 py-2 text-center w-32">TOTAL TTC</th>
               </tr>
             </thead>
             <tbody>
-              {invoice.invoice_items.map((item, index) => {
+              {invoice.invoice_items.map((item) => {
                 const itemTotal = Number(item.quantity) * Number(item.unit_price)
                 const itemTax = itemTotal * (Number(item.tax_rate) / 100)
                 const itemTotalWithTax = itemTotal + itemTax
                 return (
-                  <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="border border-gray-300 px-4 py-3">{item.description}</td>
-                    <td className="border border-gray-300 px-4 py-3 text-center">{item.quantity}</td>
-                    <td className="border border-gray-300 px-4 py-3 text-right">{formatCurrency(Number(item.unit_price))}</td>
-                    <td className="border border-gray-300 px-4 py-3 text-center">{item.tax_rate}%</td>
-                    <td className="border border-gray-300 px-4 py-3 text-right font-semibold">
+                  <tr key={item.id}>
+                    <td className="border border-[#2b2b2b] px-3 py-3">{item.description}</td>
+                    <td className="border border-[#2b2b2b] px-3 py-3 text-center">{item.quantity}</td>
+                    <td className="border border-[#2b2b2b] px-3 py-3 text-right">
                       {formatCurrency(itemTotalWithTax)}
                     </td>
                   </tr>
@@ -131,76 +136,90 @@ export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplatePro
         </div>
 
         {/* Totals */}
-        <div className="flex justify-end mb-6">
-          <div className="w-80">
-            <div className="flex justify-between py-2 border-b border-gray-300">
-              <span className="text-gray-700">Sous-total HT:</span>
+        <div className="mt-6 flex justify-end">
+          <div className="text-right text-sm">
+            <div className="flex justify-end gap-2">
+              <span className="font-semibold">HT Total :</span>
               <span className="font-semibold">{formatCurrency(invoice.subtotal)}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b border-gray-300">
-              <span className="text-gray-700">TVA:</span>
-              <span className="font-semibold">{formatCurrency(invoice.tax_amount)}</span>
-            </div>
-            <div className="flex justify-between py-3 border-t-2 border-[#1e3a8a] mt-2">
-              <span className="text-lg font-bold text-[#1e3a8a]">Total TTC:</span>
-              <span className="text-lg font-bold text-[#1e3a8a]">{formatCurrency(invoice.total)}</span>
             </div>
           </div>
         </div>
+        <div className="mt-3 bg-[#2b2b2b] text-white px-4 py-2 flex justify-end">
+          <span className="font-semibold">TOTAL TTC : {formatCurrency(invoice.total)}</span>
+        </div>
 
-        {/* Payments */}
+        {/* Payments (optional) */}
         {invoice.payments && invoice.payments.length > 0 && (
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-            <h3 className="font-semibold text-[#1e3a8a] mb-2">Paiements:</h3>
-            {invoice.payments.map((payment) => (
-              <div key={payment.id} className="text-sm text-gray-700">
-                {formatDateShort(payment.payment_date)} - {formatCurrency(Number(payment.amount))} ({payment.payment_method})
-              </div>
-            ))}
+          <div className="mt-6 text-sm">
+            <div className="font-semibold uppercase mb-2">Paiements</div>
+            <div className="space-y-1">
+              {invoice.payments.map((payment) => (
+                <div key={payment.id}>
+                  {formatDateNumeric(payment.payment_date)} - {formatCurrency(Number(payment.amount))} ({payment.payment_method})
+                </div>
+              ))}
+            </div>
             {remaining > 0 && (
-              <div className="mt-2 font-semibold text-[#1e3a8a]">
-                Reste à payer: {formatCurrency(remaining)}
-              </div>
+              <div className="mt-2 font-semibold">Reste à payer : {formatCurrency(remaining)}</div>
             )}
           </div>
         )}
 
-        {/* Notes */}
+        {/* Notes / Terms */}
         {invoice.notes && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-semibold text-[#1e3a8a] mb-2">Notes:</h3>
-            <p className="text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
+          <div className="mt-6 text-sm">
+            <div className="font-semibold uppercase mb-1">Notes</div>
+            <p className="whitespace-pre-wrap">{invoice.notes}</p>
           </div>
         )}
 
-        {/* Terms */}
         {invoice.terms && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-semibold text-[#1e3a8a] mb-2">Conditions de paiement:</h3>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{invoice.terms}</p>
+          <div className="mt-4 text-sm">
+            <div className="font-semibold uppercase mb-1">Conditions</div>
+            <p className="whitespace-pre-wrap">{invoice.terms}</p>
           </div>
         )}
 
-        {/* Footer with Signature */}
-        <div className="mt-12 pt-8 border-t-2 border-gray-300">
-          <div className="flex justify-between items-end">
-            <div className="text-xs text-gray-600">
-              {company.bank_name && (
-                <p>Banque: {company.bank_name}</p>
-              )}
+        {/* Payment Mode + Signature */}
+        <div className="mt-10 flex justify-between items-start gap-8">
+          <div className="text-sm">
+            <div className="font-semibold uppercase mb-2">Mode de paiement</div>
+            <div className="space-y-1">
+              <div>
+                <span className="font-semibold">INTITULE DU COMPTE :</span> {company.name || 'STE AETHOS TECH SARL'}
+              </div>
               {company.bank_account && (
-                <p>Compte: {company.bank_account}</p>
+                <div>
+                  <span className="font-semibold">RIB :</span> {company.bank_account}
+                </div>
+              )}
+              {company.bank_iban && (
+                <div>
+                  <span className="font-semibold">IBAN :</span> {company.bank_iban}
+                </div>
+              )}
+              {company.bank_bic && (
+                <div>
+                  <span className="font-semibold">CODE SWIFT :</span> {company.bank_bic}
+                </div>
               )}
             </div>
-            <div className="text-right">
-              <img 
-                src={Signature} 
-                alt="Signature"
-                className="h-16 w-auto opacity-90"
-              />
-            </div>
+          </div>
+          <div className="flex items-end justify-end">
+            <img
+              src={Signature}
+              alt="Signature"
+              className="h-24 w-auto opacity-90"
+            />
           </div>
         </div>
+
+        {/* Footer */}
+        {footerParts.length > 0 && (
+          <div className="mt-10 pt-3 border-t border-[#2b2b2b]/40 text-xs text-center">
+            {footerParts.join(' - ')}
+          </div>
+        )}
       </div>
     </div>
   )

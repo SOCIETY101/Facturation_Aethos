@@ -74,7 +74,7 @@ export default function Quotes() {
     return filtered
   }, [quotes, statusFilter, searchQuery, clients])
 
-  const handleDownloadPDF = (quote: Quote) => {
+  const handleDownloadPDF = async (quote: Quote) => {
     const client = clients.find((c) => c.id === quote.clientId)
     if (!client) {
       toast({
@@ -85,7 +85,7 @@ export default function Quotes() {
       return
     }
     const settings = useStore.getState().settings
-    generateQuotePDF(quote, client, settings)
+    await generateQuotePDF(quote, client, settings)
     toast({
       title: 'PDF generated',
       description: 'Quote PDF has been downloaded.',
