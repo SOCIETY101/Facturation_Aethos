@@ -137,10 +137,18 @@ export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplatePro
 
         {/* Totals */}
         <div className="mt-6 flex justify-end">
-          <div className="text-right text-sm">
+          <div className="text-right text-sm space-y-1">
             <div className="flex justify-end gap-2">
               <span className="font-semibold">HT Total :</span>
               <span className="font-semibold">{formatCurrency(invoice.subtotal)}</span>
+            </div>
+            <div className="flex justify-end gap-2">
+              <span className="font-semibold">Payé :</span>
+              <span className="font-semibold">{formatCurrency(totalPaid)}</span>
+            </div>
+            <div className="flex justify-end gap-2">
+              <span className="font-semibold">Reste :</span>
+              <span className="font-semibold">{formatCurrency(remaining)}</span>
             </div>
           </div>
         </div>
@@ -148,10 +156,10 @@ export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplatePro
           <span className="font-semibold">TOTAL TTC : {formatCurrency(invoice.total)}</span>
         </div>
 
-        {/* Payments (optional) */}
-        {invoice.payments && invoice.payments.length > 0 && (
-          <div className="mt-6 text-sm">
-            <div className="font-semibold uppercase mb-2">Paiements</div>
+        {/* Payments History */}
+        <div className="mt-6 text-sm">
+          <div className="font-semibold uppercase mb-2">Historique des paiements</div>
+          {invoice.payments && invoice.payments.length > 0 ? (
             <div className="space-y-1">
               {invoice.payments.map((payment) => (
                 <div key={payment.id}>
@@ -159,11 +167,10 @@ export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplatePro
                 </div>
               ))}
             </div>
-            {remaining > 0 && (
-              <div className="mt-2 font-semibold">Reste à payer : {formatCurrency(remaining)}</div>
-            )}
-          </div>
-        )}
+          ) : (
+            <div className="text-gray-600">Aucun paiement enregistré</div>
+          )}
+        </div>
 
         {/* Notes / Terms */}
         {invoice.notes && (

@@ -1,5 +1,4 @@
-import { useState, useMemo } from 'react'
-import { useStore } from '@/store/useStore'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -20,7 +19,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react'
+import { Plus, Search, Edit, Trash2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -34,14 +33,44 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Client } from '@/lib/types'
+import { useCompany } from '@/hooks/useCompany'
+import { useAuth } from '@/contexts/AuthContext'
+import { createClient, deleteClient, getClients, updateClient } from '@/lib/api/clients'
+import { getInvoices } from '@/lib/api/invoices'
+import { appClientToInsert, dbClientToApp, dbInvoiceToApp } from '@/lib/mappers'
 
 export default function Clients() {
-  const { clients, invoices, deleteClient, addClient, updateClient } = useStore()
   const { toast } = useToast()
+  const { user } = useAuth()
+  const { company, loading: companyLoading } = useCompany()
+  const [clients, setClients] = useState<Client[]>([])
+  const [invoices, setInvoices] = useState<import('@/lib/types').Invoice[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [deleteClientId, setDeleteClientId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!company) return
+    setLoading(true)
+    Promise.all([getClients(company.id), getInvoices(company.id)])
+      .then(([clientsData, invoicesData]) => {
+        setClients(clientsData.map(dbClientToApp))
+        setInvoices(invoicesData.map(dbInvoiceToApp))
+      })
+      .catch((error) => {
+        console.error('Error loading clients:', error)
+        toast({
+          title: 'Error',
+          description: 'Failed to load clients',
+          variant: 'destructive',
+        })
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [company, toast])
 
   const filteredClients = useMemo(() => {
     if (!searchQuery) return clients
@@ -58,7 +87,7 @@ export default function Clients() {
     const clientInvoices = invoices.filter((inv) => inv.clientId === clientId)
     const totalInvoices = clientInvoices.length
     const outstanding = clientInvoices
-      .filter((inv) => inv.status === 'unpaid' || inv.status === 'overdue')
+      .filter((inv) => inv.status === 'unpaid' || inv.status === 'overdue' || inv.status === 'partial')
       .reduce((sum, inv) => {
         const paid = inv.payments.reduce((pSum, p) => pSum + p.amount, 0)
         return sum + (inv.total - paid)
@@ -66,8 +95,9 @@ export default function Clients() {
     return { totalInvoices, outstanding }
   }
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (!company) return
     const formData = new FormData(e.currentTarget)
     const clientData: Partial<Client> = {
       name: formData.get('name') as string,
@@ -77,23 +107,37 @@ export default function Clients() {
       taxId: formData.get('taxId') as string || undefined,
     }
 
-    if (editingClient) {
-      updateClient(editingClient.id, clientData)
+    try {
+      if (editingClient) {
+        const updated = await updateClient(editingClient.id, {
+          name: clientData.name,
+          nom: clientData.name,
+          email: clientData.email || null,
+          phone: clientData.phone || null,
+          address: clientData.address || null,
+          tax_id: clientData.taxId || null,
+        })
+        setClients((prev) => prev.map((c) => (c.id === updated.id ? dbClientToApp(updated) : c)))
+        toast({
+          title: 'Client updated',
+          description: 'Client information has been updated successfully.',
+        })
+      } else {
+        const created = await createClient(appClientToInsert(clientData, company.id, user?.id))
+        setClients((prev) => [dbClientToApp(created), ...prev])
+        toast({
+          title: 'Client added',
+          description: 'New client has been added successfully.',
+        })
+      }
+    } catch (error) {
+      console.error('Error saving client:', error)
       toast({
-        title: 'Client updated',
-        description: 'Client information has been updated successfully.',
+        title: 'Error',
+        description: 'Failed to save client',
+        variant: 'destructive',
       })
-    } else {
-      const newClient: Client = {
-        id: `client-${Date.now()}`,
-        ...clientData,
-        createdAt: new Date().toISOString().split('T')[0],
-      } as Client
-      addClient(newClient)
-      toast({
-        title: 'Client added',
-        description: 'New client has been added successfully.',
-      })
+      return
     }
     setIsDialogOpen(false)
     setEditingClient(null)
@@ -104,15 +148,33 @@ export default function Clients() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteClientId) {
-      deleteClient(deleteClientId)
-      toast({
-        title: 'Client deleted',
-        description: 'Client has been deleted successfully.',
-      })
+      try {
+        await deleteClient(deleteClientId)
+        setClients((prev) => prev.filter((c) => c.id !== deleteClientId))
+        toast({
+          title: 'Client deleted',
+          description: 'Client has been deleted successfully.',
+        })
+      } catch (error) {
+        console.error('Error deleting client:', error)
+        toast({
+          title: 'Error',
+          description: 'Failed to delete client',
+          variant: 'destructive',
+        })
+      }
       setDeleteClientId(null)
     }
+  }
+
+  if (companyLoading || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (

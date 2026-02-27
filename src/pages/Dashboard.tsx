@@ -1,4 +1,3 @@
-import { useStore } from '@/store/useStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDateShort } from '@/lib/utils'
 import { TrendingUp, FileText, Receipt, DollarSign } from 'lucide-react'
@@ -14,10 +13,42 @@ import { Badge } from '@/components/ui/badge'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
+import { useCompany } from '@/hooks/useCompany'
+import { getClients } from '@/lib/api/clients'
+import { getQuotes } from '@/lib/api/quotes'
+import { getInvoices } from '@/lib/api/invoices'
+import { dbClientToApp, dbInvoiceToApp, dbQuoteToApp } from '@/lib/mappers'
+import { Client, Quote, Invoice } from '@/lib/types'
 
 export default function Dashboard() {
-  const { invoices, quotes, clients } = useStore()
+  const { company, loading: companyLoading } = useCompany()
+  const [clients, setClients] = useState<Client[]>([])
+  const [quotes, setQuotes] = useState<Quote[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!company) return
+
+    setLoading(true)
+    Promise.all([
+      getClients(company.id),
+      getQuotes(company.id),
+      getInvoices(company.id),
+    ])
+      .then(([clientsData, quotesData, invoicesData]) => {
+        setClients(clientsData.map(dbClientToApp))
+        setQuotes(quotesData.map(dbQuoteToApp))
+        setInvoices(invoicesData.map(dbInvoiceToApp))
+      })
+      .catch((error) => {
+        console.error('Error loading dashboard data:', error)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [company])
 
   const metrics = useMemo(() => {
     const totalRevenue = invoices
@@ -25,7 +56,7 @@ export default function Dashboard() {
       .reduce((sum, inv) => sum + inv.total, 0)
 
     const outstandingInvoices = invoices.filter(
-      (inv) => inv.status === 'unpaid' || inv.status === 'overdue'
+      (inv) => inv.status === 'unpaid' || inv.status === 'overdue' || inv.status === 'partial'
     )
     const outstandingAmount = outstandingInvoices.reduce(
       (sum, inv) => {
@@ -95,9 +126,18 @@ export default function Dashboard() {
     })
   }, [invoices])
 
+  if (companyLoading || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
       paid: 'success',
+      partial: 'warning',
       sent: 'default',
       unpaid: 'warning',
       overdue: 'destructive',
@@ -136,7 +176,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(metrics.outstandingAmount)}</div>
             <p className="text-xs text-muted-foreground">
-              {invoices.filter((inv) => inv.status === 'unpaid' || inv.status === 'overdue').length} invoices
+              {invoices.filter((inv) => inv.status === 'unpaid' || inv.status === 'overdue' || inv.status === 'partial').length} invoices
             </p>
           </CardContent>
         </Card>

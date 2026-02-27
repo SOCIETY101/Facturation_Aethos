@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { useEffect } from 'react'
+import { syncLocalDataToSupabase } from '@/lib/sync'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { Layout } from '@/components/layout/Layout'
 import Dashboard from '@/pages/Dashboard'
@@ -18,6 +20,13 @@ import QuotePreview from '@/pages/QuotePreview'
 
 function AppRoutes() {
   const { user, loading } = useAuth()
+
+  useEffect(() => {
+    if (!user) return
+    syncLocalDataToSupabase(user.id).catch((error) => {
+      console.error('Local data sync failed:', error)
+    })
+  }, [user])
 
   if (loading) {
     return (

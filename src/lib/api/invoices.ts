@@ -116,6 +116,12 @@ export async function deleteInvoice(id: string) {
 }
 
 export async function addPayment(payment: PaymentInsert) {
+  const invoice = await getInvoice(payment.invoice_id)
+  const remaining = invoice.total - invoice.paid_amount
+  if (payment.amount > remaining) {
+    throw new Error('Payment amount exceeds remaining balance')
+  }
+
   const { data, error } = await supabase
     .from('payments')
     .insert(payment)
@@ -125,15 +131,23 @@ export async function addPayment(payment: PaymentInsert) {
   if (error) throw error
 
   // Update invoice paid_amount and balance
-  const invoice = await getInvoice(payment.invoice_id)
   const newPaidAmount = invoice.paid_amount + payment.amount
   const newBalance = invoice.total - newPaidAmount
+  let newStatus: Invoice['status'] = invoice.status as Invoice['status']
+  if (newPaidAmount >= invoice.total) {
+    newStatus = 'paid'
+  } else if (newPaidAmount > 0) {
+    newStatus = 'partial'
+  } else if (invoice.status === 'paid') {
+    newStatus = 'unpaid'
+  }
 
   await supabase
     .from('invoices')
     .update({
       paid_amount: newPaidAmount,
       balance: newBalance,
+      status: newStatus,
     })
     .eq('id', payment.invoice_id)
 

@@ -190,7 +190,17 @@ export async function generateInvoicePDF(
   doc.text(`TOTAL TTC : ${formatCurrency(invoice.total)}`, pageWidth - margin - 2, y + 7, { align: 'right' })
 
   // Payment info
+  const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0)
+  const remaining = invoice.total - totalPaid
+
   y += 16
+  doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
+  doc.setFont('helvetica', 'bold')
+  doc.text(`Payé : ${formatCurrency(totalPaid)}`, pageWidth - margin - 2, y, { align: 'right' })
+  y += 6
+  doc.text(`Reste : ${formatCurrency(remaining)}`, pageWidth - margin - 2, y, { align: 'right' })
+  y += 8
+
   doc.setTextColor(COLOR_DARK[0], COLOR_DARK[1], COLOR_DARK[2])
   doc.setFont('helvetica', 'bold')
   doc.text('MODE DE PAIEMENT', margin, y)

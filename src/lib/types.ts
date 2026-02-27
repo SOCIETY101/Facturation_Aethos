@@ -45,7 +45,7 @@ export interface Invoice {
   quoteId?: string
   date: string
   dueDate: string
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'unpaid'
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'unpaid' | 'partial'
   lineItems: LineItem[]
   subtotal: number
   taxAmount: number

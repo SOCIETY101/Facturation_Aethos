@@ -1,84 +1,102 @@
-# Facturation Project Reference
+# Facturation Project Reference (Current State)
 
 ## What This Project Is
-Facturation is a web application for managing invoices and quotes. It includes dashboards, clients, products/services, quotes, invoices, payments, and company settings, with PDF previews for quotes and invoices.
+Facturation is a web application for managing invoices and quotes with Supabase as the source of truth. It includes dashboards, clients, quotes, invoices, payments, and company settings, plus PDF previews/exports that follow the Aethos brand design.
 
-The current codebase is a Vite + React + TypeScript frontend backed by Supabase (auth + database + storage). It is not purely localStorage-based; the app uses Supabase APIs and database tables for persistence.
+This codebase is Vite + React + TypeScript with Supabase (auth + Postgres + storage). LocalStorage is only used for one-time migration of legacy data; after that, all data lives in Supabase.
 
 ## Primary Capabilities
-- Authentication via Supabase (email/password flows).
+- Authentication via Supabase (email/password).
 - Company profile and settings (bank details, numbering prefixes, tax rates, currency).
 - Client management (CRUD, contact details).
 - Quotes with line items, status management, and PDF preview/export.
-- Invoices with line items, status management, payments tracking, and PDF preview/export.
-- Products/services catalog used for line items.
-- Dashboard metrics and recent activity views.
+- Invoices with line items, status management, **partial payments**, and PDF preview/export.
+- Payment tracking with history, paid/remaining totals, and overpayment prevention.
+- Dashboard metrics (revenue, outstanding, pending quotes) based on Supabase data.
+
+## Partial Payments (Current Behavior)
+- Invoice status supports: `draft`, `sent`, `unpaid`, `overdue`, `partial`, `paid`.
+- When a payment is recorded:
+  - `paid_amount` and `balance` are updated.
+  - Status becomes `partial` if paid amount is > 0 and < total.
+  - Status becomes `paid` if paid amount >= total.
+- Overpayment is blocked in both UI and API.
 
 ## Tech Stack
 - Vite + React 18 + TypeScript
-- Tailwind CSS + shadcn/ui + Radix UI primitives
-- Zustand (state management, where used)
+- Tailwind CSS + shadcn/ui + Radix UI
 - Supabase (auth, Postgres, storage)
 - jsPDF (PDF generation)
 - Recharts (charts)
 
 ## How Data Works (Supabase)
-Supabase is configured in `src/lib/supabase.ts` and expects these environment variables:
+Supabase is configured in `src/lib/supabase.ts` and expects:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-Database tables are typed in `src/lib/supabase.ts`. Core tables include:
+Core tables (app schema):
 - `companies`, `profiles`
 - `clients`, `products`, `tax_rates`
 - `quotes`, `quote_items`
 - `invoices`, `invoice_items`, `payments`
 
 API modules under `src/lib/api/` wrap table access:
-- `clients.ts`, `products.ts`, `company.ts`, `quotes.ts`, `invoices.ts`
+- `clients.ts`, `company.ts`, `quotes.ts`, `invoices.ts`
 
-Auth flows are centralized in `src/contexts/AuthContext.tsx`, with route protection in `src/components/auth/ProtectedRoute`.
+### LocalStorage → Supabase Migration
+- `src/lib/sync.ts` runs once per browser session on login.
+- Reads `facturation-storage`, inserts into Supabase, and sets `facturation-supabase-migrated`.
+- Mapping utilities live in `src/lib/mappers.ts`.
 
-## Application Structure
-- `src/App.tsx`: router and high-level app structure.
-- `src/pages/`: page-level views (Dashboard, Clients, Quotes, Invoices, Settings, Signup, etc.).
-- `src/components/`: UI components, layouts, templates, dialogs.
-- `src/contexts/`: auth context and providers.
-- `src/lib/`: utilities, Supabase client, PDF helpers, API wrappers.
-- `src/store/`: shared state (Zustand).
+### Row Level Security (RLS)
+RLS must allow authenticated users to CRUD rows for their `company_id`. Without policies, inserts will fail with RLS errors.
+
+## Current UI/UX Notes
+- Invoice list shows **Amount**, **Paid**, **Remaining** in separate columns.
+- Invoice preview (template) includes payment history and paid/remaining totals.
+- Edit invoice dialog includes an inline payments section for partial payments.
 
 ## PDF Generation
-PDF previews are rendered from templates in `src/components/templates/` and helper functions in `src/lib/`.
+- Invoice and quote PDFs are generated with jsPDF.
+- Invoice PDFs show **Paid** and **Remaining**.
+- Templates follow Aethos branding (colors #b00d0b, #2b2b2b) and use:
+  - `src/assets/Logo.png`
+  - `src/assets/Segnature.png`
+  - `src/assets/Devis RealMeetVerse 2 (2).pdf` (design reference)
+
+## Application Structure
+- `src/App.tsx`: router and app initialization; triggers localStorage → Supabase sync.
+- `src/pages/`: Dashboard, Clients, Quotes, Invoices, Settings, Templates, Auth.
+- `src/components/`: UI components, layouts, invoice/quote templates.
+- `src/contexts/`: Auth context + route protection.
+- `src/lib/`: Supabase client, API wrappers, PDF generation, mappers, sync.
+- `src/store/`: legacy Zustand store (no longer the primary data source).
 
 ## Setup and Operational Docs
-The repository includes setup/checklist docs that explain Supabase setup and verification:
 - `QUICK_SETUP.md`
 - `SUPABASE_SETUP.md`
 - `INTEGRATION_GUIDE.md`
 - `VERIFY_SETUP.md`
 - `TROUBLESHOOTING.md`
 
-There are SQL scripts in the repo root to set up or fix tables:
+SQL scripts:
 - `complete_database_setup.sql`
+- `supabase_schema_fix.sql` (adds missing app columns)
+- `cleanup_unused_tables.sql` (removes legacy tables)
 - `fix_*` and `quick_fix_profiles.sql`
 
 ## Dev Commands
-From `package.json`:
-- `npm run dev`: start dev server
-- `npm run build`: typecheck + build
-- `npm run preview`: preview prod build
-- `npm run lint`: eslint
-
-## Notes and Assumptions
-- The README mentions localStorage persistence; the current codebase uses Supabase and expects environment variables. Treat Supabase as the source of truth unless you intentionally switch to local-only mode.
-- The app includes test utilities for Supabase auth in `src/lib/test-auth.ts` and debug helpers in `src/lib/supabase-debug.ts`.
+- `npm run dev`
+- `npm run build`
+- `npm run preview`
+- `npm run lint`
 
 ## Quick Orientation (What to Read First)
-- `README.md`: high-level features and structure.
-- `src/lib/supabase.ts`: environment requirements and database types.
-- `src/contexts/AuthContext.tsx`: auth flows.
+- `src/lib/supabase.ts`: environment requirements and DB types.
 - `src/lib/api/`: data access layer.
-- `src/pages/`: UI flow and feature scope.
-
+- `src/lib/mappers.ts`: app↔DB mapping.
+- `src/lib/sync.ts`: localStorage migration.
+- `src/components/templates/InvoiceTemplate.tsx` and `QuoteTemplate.tsx`: document layout.
 
 ## Architecture Diagram
 ```mermaid
@@ -88,7 +106,6 @@ flowchart LR
     Pages[Pages]
     Components[Components]
     Templates[PDF Templates]
-    Store[State (Zustand)]
   end
 
   subgraph Data[Supabase]
@@ -99,7 +116,6 @@ flowchart LR
 
   App --> Pages
   Pages --> Components
-  Pages --> Store
   Pages --> Templates
 
   Pages -->|API wrappers| DB

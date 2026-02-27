@@ -1,5 +1,4 @@
-import { useState, useMemo } from 'react'
-import { useStore } from '@/store/useStore'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,7 +32,7 @@ import { Plus, Search, Edit, Trash2, FileDown, DollarSign, Eye } from 'lucide-re
 import { Link } from 'react-router-dom'
 import { formatCurrency, formatDateShort } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { Invoice, LineItem, Payment } from '@/lib/types'
+import { Invoice, LineItem, Payment, Quote, Client, AppSettings } from '@/lib/types'
 import { generateInvoicePDF } from '@/lib/pdf'
 import {
   AlertDialog,
@@ -45,10 +44,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useCompany } from '@/hooks/useCompany'
+import { getClients } from '@/lib/api/clients'
+import { addPayment as addPaymentApi, createInvoice, deleteInvoice, getInvoice, getInvoices, getNextInvoiceNumber, updateInvoice } from '@/lib/api/invoices'
+import { getQuotes } from '@/lib/api/quotes'
+import { getTaxRates } from '@/lib/api/company'
+import { appLineItemsToInvoiceItems, appPaymentToInsert, dbClientToApp, dbInvoiceToApp, dbQuoteToApp } from '@/lib/mappers'
+import { Database } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function Invoices() {
-  const { invoices, clients, addInvoice, updateInvoice, deleteInvoice, addPayment } = useStore()
+  const { company, loading: companyLoading } = useCompany()
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [quotes, setQuotes] = useState<Quote[]>([])
+  const [taxRates, setTaxRates] = useState<Database['public']['Tables']['tax_rates']['Row'][]>([])
+  const [loading, setLoading] = useState(true)
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -56,6 +67,29 @@ export default function Invoices() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null)
   const [paymentInvoiceId, setPaymentInvoiceId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!company) return
+    setLoading(true)
+    Promise.all([getClients(company.id), getInvoices(company.id), getQuotes(company.id), getTaxRates(company.id)])
+      .then(([clientsData, invoicesData, quotesData, taxRatesData]) => {
+        setClients(clientsData.map(dbClientToApp))
+        setInvoices(invoicesData.map(dbInvoiceToApp))
+        setQuotes(quotesData.map(dbQuoteToApp))
+        setTaxRates(taxRatesData)
+      })
+      .catch((error) => {
+        console.error('Error loading invoices:', error)
+        toast({
+          title: 'Error',
+          description: 'Failed to load invoices',
+          variant: 'destructive',
+        })
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [company, toast])
 
   const filteredInvoices = useMemo(() => {
     let filtered = invoices
@@ -85,7 +119,30 @@ export default function Invoices() {
       })
       return
     }
-    const settings = useStore.getState().settings
+    if (!company) return
+
+    const settings: AppSettings = {
+      company: {
+        name: company.name,
+        logo: company.logo_url || undefined,
+        address: company.address || '',
+        city: company.city || '',
+        postalCode: company.postal_code || '',
+        country: company.country || '',
+        taxId: company.tax_id || '',
+        bankName: company.bank_name || '',
+        bankAccount: company.bank_account || '',
+        bankIBAN: company.bank_iban || '',
+        bankBIC: company.bank_bic || '',
+      },
+      invoice: {
+        prefix: company.invoice_prefix,
+        startingNumber: company.invoice_start_number,
+        terms: company.default_payment_terms || '',
+      },
+      taxRates: [],
+    }
+
     await generateInvoicePDF(invoice, client, settings)
     toast({
       title: 'PDF generated',
@@ -98,19 +155,39 @@ export default function Invoices() {
       draft: 'secondary',
       sent: 'default',
       paid: 'success',
+      partial: 'warning',
       unpaid: 'warning',
       overdue: 'destructive',
     }
     return <Badge variant={variants[status] || 'default'}>{status}</Badge>
   }
 
-  const handleAddPayment = (invoiceId: string, payment: Payment) => {
-    addPayment(invoiceId, payment)
-    toast({
-      title: 'Payment recorded',
-      description: 'Payment has been recorded successfully.',
-    })
-    setPaymentInvoiceId(null)
+  const handleAddPayment = async (invoiceId: string, payment: Payment) => {
+    try {
+      await addPaymentApi(appPaymentToInsert(payment, invoiceId))
+      const refreshed = await getInvoice(invoiceId)
+      setInvoices((prev) => prev.map((inv) => (inv.id === invoiceId ? dbInvoiceToApp(refreshed) : inv)))
+      toast({
+        title: 'Payment recorded',
+        description: 'Payment has been recorded successfully.',
+      })
+      setPaymentInvoiceId(null)
+    } catch (error) {
+      console.error('Error adding payment:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to record payment',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  if (companyLoading || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (
@@ -130,6 +207,16 @@ export default function Invoices() {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <InvoiceForm
               invoice={editingInvoice}
+              company={company!}
+              clients={clients}
+              quotes={quotes}
+              taxRates={taxRates}
+              onSaved={(saved) => {
+                setInvoices((prev) => {
+                  const exists = prev.some((inv) => inv.id === saved.id)
+                  return exists ? prev.map((inv) => (inv.id === saved.id ? saved : inv)) : [saved, ...prev]
+                })
+              }}
               onClose={() => {
                 setIsDialogOpen(false)
                 setEditingInvoice(null)
@@ -158,6 +245,7 @@ export default function Invoices() {
             <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="sent">Sent</SelectItem>
             <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="partial">Partial</SelectItem>
             <SelectItem value="unpaid">Unpaid</SelectItem>
             <SelectItem value="overdue">Overdue</SelectItem>
           </SelectContent>
@@ -173,6 +261,8 @@ export default function Invoices() {
               <TableHead>Date</TableHead>
               <TableHead>Due Date</TableHead>
               <TableHead>Amount</TableHead>
+              <TableHead>Paid</TableHead>
+              <TableHead>Remaining</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -180,7 +270,7 @@ export default function Invoices() {
           <TableBody>
             {filteredInvoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                <TableCell colSpan={9} className="text-center text-muted-foreground">
                   No invoices found
                 </TableCell>
               </TableRow>
@@ -196,41 +286,24 @@ export default function Invoices() {
                     <TableCell>{formatDateShort(invoice.date)}</TableCell>
                     <TableCell>{formatDateShort(invoice.dueDate)}</TableCell>
                     <TableCell>
-                      <div>
-                        <div>{formatCurrency(invoice.total)}</div>
-                        {remaining > 0 && invoice.status !== 'paid' && (
-                          <div className="text-xs text-muted-foreground">
-                            Remaining: {formatCurrency(remaining)}
-                          </div>
-                        )}
-                      </div>
+                      {formatCurrency(invoice.total)}
                     </TableCell>
+                    <TableCell>{formatCurrency(totalPaid)}</TableCell>
+                    <TableCell>{formatCurrency(remaining)}</TableCell>
                     <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          asChild
-                        >
+                        <Button variant="ghost" size="icon" asChild>
                           <Link to={`/invoices/${invoice.id}/preview`}>
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>
                         {invoice.status !== 'paid' && remaining > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setPaymentInvoiceId(invoice.id)}
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => setPaymentInvoiceId(invoice.id)}>
                             <DollarSign className="h-4 w-4" />
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDownloadPDF(invoice)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => handleDownloadPDF(invoice)}>
                           <FileDown className="h-4 w-4" />
                         </Button>
                         <Button
@@ -243,11 +316,7 @@ export default function Invoices() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteInvoiceId(invoice.id)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteInvoiceId(invoice.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
@@ -271,13 +340,23 @@ export default function Invoices() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                if (deleteInvoiceId) {
-                  deleteInvoice(deleteInvoiceId)
+              onClick={async () => {
+                if (!deleteInvoiceId) return
+                try {
+                  await deleteInvoice(deleteInvoiceId)
+                  setInvoices((prev) => prev.filter((inv) => inv.id !== deleteInvoiceId))
                   toast({
                     title: 'Invoice deleted',
                     description: 'Invoice has been deleted successfully.',
                   })
+                } catch (error) {
+                  console.error('Error deleting invoice:', error)
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to delete invoice',
+                    variant: 'destructive',
+                  })
+                } finally {
                   setDeleteInvoiceId(null)
                 }
               }}
@@ -301,9 +380,25 @@ export default function Invoices() {
   )
 }
 
-function InvoiceForm({ invoice, onClose }: { invoice: Invoice | null; onClose: () => void }) {
-  const { clients, quotes, invoices, addInvoice, updateInvoice, settings } = useStore()
+function InvoiceForm({
+  invoice,
+  company,
+  clients,
+  quotes,
+  taxRates,
+  onClose,
+  onSaved,
+}: {
+  invoice: Invoice | null
+  company: Database['public']['Tables']['companies']['Row']
+  clients: Client[]
+  quotes: Quote[]
+  taxRates: Database['public']['Tables']['tax_rates']['Row'][]
+  onClose: () => void
+  onSaved: (invoice: Invoice) => void
+}) {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [clientId, setClientId] = useState(invoice?.clientId || '')
   const [quoteId, setQuoteId] = useState(invoice?.quoteId || '')
   const [date, setDate] = useState(invoice?.date || new Date().toISOString().split('T')[0])
@@ -318,11 +413,21 @@ function InvoiceForm({ invoice, onClose }: { invoice: Invoice | null; onClose: (
         description: '',
         quantity: 1,
         unitPrice: 0,
-        taxRate: settings.taxRates.find((t) => t.default)?.rate || 20,
+        taxRate: taxRates.find((t) => t.is_default)?.rate || 20,
       },
     ]
   )
   const [notes, setNotes] = useState(invoice?.notes || '')
+  const [payments, setPayments] = useState<Payment[]>(invoice?.payments || [])
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [paymentMethod, setPaymentMethod] = useState<Payment['method']>('bank_transfer')
+  const [paymentReference, setPaymentReference] = useState('')
+
+  useEffect(() => {
+    setPayments(invoice?.payments || [])
+    setStatus(invoice?.status || 'draft')
+  }, [invoice?.id])
 
   const availableQuotes = useMemo(
     () => quotes.filter((q) => q.clientId === clientId && q.status === 'accepted'),
@@ -346,6 +451,10 @@ function InvoiceForm({ invoice, onClose }: { invoice: Invoice | null; onClose: (
     return { subtotal, taxAmount, total }
   }, [lineItems])
 
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0)
+  const paymentTotal = invoice ? invoice.total : calculations.total
+  const remaining = paymentTotal - totalPaid
+
   const handleAddLineItem = () => {
     setLineItems([
       ...lineItems,
@@ -354,7 +463,7 @@ function InvoiceForm({ invoice, onClose }: { invoice: Invoice | null; onClose: (
         description: '',
         quantity: 1,
         unitPrice: 0,
-        taxRate: settings.taxRates.find((t) => t.default)?.rate || 20,
+        taxRate: taxRates.find((t) => t.is_default)?.rate || 20,
       },
     ])
   }
@@ -364,12 +473,53 @@ function InvoiceForm({ invoice, onClose }: { invoice: Invoice | null; onClose: (
   }
 
   const handleLineItemChange = (id: string, field: keyof LineItem, value: string | number) => {
-    setLineItems(
-      lineItems.map((item) => (item.id === id ? { ...item, [field]: value } : item))
-    )
+    setLineItems(lineItems.map((item) => (item.id === id ? { ...item, [field]: value } : item)))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleAddPaymentInline = async () => {
+    if (!invoice) return
+    const amount = parseFloat(paymentAmount)
+    if (Number.isNaN(amount) || amount <= 0 || amount > remaining) {
+      toast({
+        title: 'Error',
+        description: `Payment amount must be between 0 and ${formatCurrency(remaining)}`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      await addPaymentApi(appPaymentToInsert({
+        id: `p-${Date.now()}`,
+        date: paymentDate,
+        amount,
+        method: paymentMethod,
+        reference: paymentReference || undefined,
+      }, invoice.id, user?.id))
+
+      const refreshed = await getInvoice(invoice.id)
+      const updated = dbInvoiceToApp(refreshed)
+      setPayments(updated.payments)
+      setStatus(updated.status)
+      onSaved(updated)
+
+      setPaymentAmount('')
+      setPaymentReference('')
+      toast({
+        title: 'Payment recorded',
+        description: 'Payment has been recorded successfully.',
+      })
+    } catch (error) {
+      console.error('Error recording payment:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to record payment',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!clientId) {
       toast({
@@ -380,36 +530,67 @@ function InvoiceForm({ invoice, onClose }: { invoice: Invoice | null; onClose: (
       return
     }
 
-    const invoiceData: Invoice = {
-      id: invoice?.id || `inv-${Date.now()}`,
-      invoiceNumber: invoice?.invoiceNumber || `INV-${String(invoices.length + 1).padStart(4, '0')}`,
-      clientId,
-      quoteId: quoteId || undefined,
-      date,
-      dueDate,
-      status,
-      lineItems,
-      subtotal: calculations.subtotal,
-      taxAmount: calculations.taxAmount,
-      total: calculations.total,
-      notes: notes || undefined,
-      payments: invoice?.payments || [],
-    }
-
-    if (invoice) {
-      updateInvoice(invoice.id, invoiceData)
+    try {
+      if (invoice) {
+        const updated = await updateInvoice(
+          invoice.id,
+          {
+            client_id: clientId,
+            quote_id: quoteId || null,
+            date,
+            due_date: dueDate,
+            status,
+            subtotal: calculations.subtotal,
+            tax_amount: calculations.taxAmount,
+            total: calculations.total,
+            notes: notes || null,
+            terms: null,
+          },
+          appLineItemsToInvoiceItems(lineItems)
+        )
+        onSaved(dbInvoiceToApp(updated))
+        toast({
+          title: 'Invoice updated',
+          description: 'Invoice has been updated successfully.',
+        })
+      } else {
+        const nextNumber = await getNextInvoiceNumber(company.id, company.invoice_prefix)
+        const invoiceNumber = `${company.invoice_prefix}${String(nextNumber).padStart(4, '0')}`
+        const created = await createInvoice(
+          {
+            company_id: company.id,
+            client_id: clientId,
+            quote_id: quoteId || null,
+            status,
+            date,
+            due_date: dueDate,
+            subtotal: calculations.subtotal,
+            tax_amount: calculations.taxAmount,
+            total: calculations.total,
+            paid_amount: 0,
+            balance: calculations.total,
+            notes: notes || null,
+            terms: null,
+            created_by: null,
+          },
+          appLineItemsToInvoiceItems(lineItems),
+          invoiceNumber
+        )
+        onSaved(dbInvoiceToApp(created))
+        toast({
+          title: 'Invoice created',
+          description: 'Invoice has been created successfully.',
+        })
+      }
+      onClose()
+    } catch (error) {
+      console.error('Error saving invoice:', error)
       toast({
-        title: 'Invoice updated',
-        description: 'Invoice has been updated successfully.',
-      })
-    } else {
-      addInvoice(invoiceData)
-      toast({
-        title: 'Invoice created',
-        description: 'Invoice has been created successfully.',
+        title: 'Error',
+        description: 'Failed to save invoice',
+        variant: 'destructive',
       })
     }
-    onClose()
   }
 
   return (
@@ -447,6 +628,7 @@ function InvoiceForm({ invoice, onClose }: { invoice: Invoice | null; onClose: (
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="sent">Sent</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="partial">Partial</SelectItem>
                 <SelectItem value="unpaid">Unpaid</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
               </SelectContent>
@@ -602,6 +784,76 @@ function InvoiceForm({ invoice, onClose }: { invoice: Invoice | null; onClose: (
             rows={3}
           />
         </div>
+
+        {invoice && (
+          <div className="mt-4 border-t pt-4 space-y-3">
+            <div className="font-semibold">Payments</div>
+            <div className="text-sm text-muted-foreground">
+              Paid: {formatCurrency(totalPaid)} — Remaining: {formatCurrency(remaining)}
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="paymentAmount">Payment Amount</Label>
+                <Input
+                  id="paymentAmount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  max={remaining}
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder={formatCurrency(remaining)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="paymentDate">Payment Date</Label>
+                <Input
+                  id="paymentDate"
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="paymentMethod">Payment Method</Label>
+                <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as Payment['method'])}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="paymentReference">Reference</Label>
+                <Input
+                  id="paymentReference"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  placeholder="Payment reference or check number"
+                />
+              </div>
+            </div>
+            <Button type="button" onClick={handleAddPaymentInline}>
+              Record Payment
+            </Button>
+
+            {payments.length > 0 && (
+              <div className="text-sm text-muted-foreground space-y-1">
+                {payments.map((payment) => (
+                  <div key={payment.id}>
+                    {payment.date} — {formatCurrency(payment.amount)} ({payment.method})
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>

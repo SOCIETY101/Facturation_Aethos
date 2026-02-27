@@ -1,5 +1,4 @@
-import { useState, useMemo } from 'react'
-import { useStore } from '@/store/useStore'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,8 +32,14 @@ import { Plus, Search, Edit, Trash2, FileDown, ArrowRight, Eye } from 'lucide-re
 import { Link } from 'react-router-dom'
 import { formatCurrency, formatDateShort } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { Quote, LineItem, Client } from '@/lib/types'
+import { Quote, LineItem, Client, AppSettings } from '@/lib/types'
 import { generateQuotePDF } from '@/lib/pdf'
+import { useCompany } from '@/hooks/useCompany'
+import { getClients } from '@/lib/api/clients'
+import { createQuote, deleteQuote, getNextQuoteNumber, getQuotes, updateQuote } from '@/lib/api/quotes'
+import { createInvoice, getNextInvoiceNumber } from '@/lib/api/invoices'
+import { getTaxRates } from '@/lib/api/company'
+import { appLineItemsToInvoiceItems, appLineItemsToQuoteItems, dbClientToApp, dbQuoteToApp } from '@/lib/mappers'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,9 +50,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Database } from '@/lib/supabase'
 
 export default function Quotes() {
-  const { quotes, clients, invoices, addQuote, updateQuote, deleteQuote, addInvoice } = useStore()
+  const { company, loading: companyLoading } = useCompany()
+  const [quotes, setQuotes] = useState<Quote[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [taxRates, setTaxRates] = useState<Database['public']['Tables']['tax_rates']['Row'][]>([])
+  const [loading, setLoading] = useState(true)
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -55,6 +65,28 @@ export default function Quotes() {
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null)
   const [deleteQuoteId, setDeleteQuoteId] = useState<string | null>(null)
   const [convertQuoteId, setConvertQuoteId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!company) return
+    setLoading(true)
+    Promise.all([getClients(company.id), getQuotes(company.id), getTaxRates(company.id)])
+      .then(([clientsData, quotesData, taxRatesData]) => {
+        setClients(clientsData.map(dbClientToApp))
+        setQuotes(quotesData.map(dbQuoteToApp))
+        setTaxRates(taxRatesData)
+      })
+      .catch((error) => {
+        console.error('Error loading quotes:', error)
+        toast({
+          title: 'Error',
+          description: 'Failed to load quotes',
+          variant: 'destructive',
+        })
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [company, toast])
 
   const filteredQuotes = useMemo(() => {
     let filtered = quotes
@@ -84,7 +116,30 @@ export default function Quotes() {
       })
       return
     }
-    const settings = useStore.getState().settings
+    if (!company) return
+
+    const settings: AppSettings = {
+      company: {
+        name: company.name,
+        logo: company.logo_url || undefined,
+        address: company.address || '',
+        city: company.city || '',
+        postalCode: company.postal_code || '',
+        country: company.country || '',
+        taxId: company.tax_id || '',
+        bankName: company.bank_name || '',
+        bankAccount: company.bank_account || '',
+        bankIBAN: company.bank_iban || '',
+        bankBIC: company.bank_bic || '',
+      },
+      invoice: {
+        prefix: company.invoice_prefix,
+        startingNumber: company.invoice_start_number,
+        terms: company.default_payment_terms || '',
+      },
+      taxRates: [],
+    }
+
     await generateQuotePDF(quote, client, settings)
     toast({
       title: 'PDF generated',
@@ -92,37 +147,55 @@ export default function Quotes() {
     })
   }
 
-  const handleConvertToInvoice = () => {
-    if (!convertQuoteId) return
+  const handleConvertToInvoice = async () => {
+    if (!convertQuoteId || !company) return
     const quote = quotes.find((q) => q.id === convertQuoteId)
     if (!quote) return
 
     const dueDate = new Date(quote.date)
     dueDate.setDate(dueDate.getDate() + 30)
 
-    const invoiceNumber = `INV-${String(invoices.length + 1).padStart(4, '0')}`
-    const newInvoice = {
-      id: `inv-${Date.now()}`,
-      invoiceNumber,
-      clientId: quote.clientId,
-      quoteId: quote.id,
-      date: new Date().toISOString().split('T')[0],
-      dueDate: dueDate.toISOString().split('T')[0],
-      status: 'draft' as const,
-      lineItems: quote.lineItems,
-      subtotal: quote.subtotal,
-      taxAmount: quote.taxAmount,
-      total: quote.total,
-      notes: quote.notes,
-      payments: [],
+    try {
+      const nextNumber = await getNextInvoiceNumber(company.id, company.invoice_prefix)
+      const invoiceNumber = `${company.invoice_prefix}${String(nextNumber).padStart(4, '0')}`
+
+      await createInvoice(
+        {
+          company_id: company.id,
+          client_id: quote.clientId,
+          quote_id: quote.id,
+          status: 'draft',
+          date: new Date().toISOString().split('T')[0],
+          due_date: dueDate.toISOString().split('T')[0],
+          subtotal: quote.subtotal,
+          tax_amount: quote.taxAmount,
+          total: quote.total,
+          paid_amount: 0,
+          balance: quote.total,
+          notes: quote.notes || null,
+          terms: null,
+          created_by: null,
+        },
+        appLineItemsToInvoiceItems(quote.lineItems),
+        invoiceNumber
+      )
+
+      const updated = await updateQuote(quote.id, { status: 'accepted' })
+      setQuotes((prev) => prev.map((q) => (q.id === updated.id ? dbQuoteToApp(updated) : q)))
+
+      toast({
+        title: 'Invoice created',
+        description: 'Quote has been converted to an invoice.',
+      })
+      setConvertQuoteId(null)
+    } catch (error) {
+      console.error('Error converting quote:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to convert quote to invoice',
+        variant: 'destructive',
+      })
     }
-    addInvoice(newInvoice)
-    updateQuote(quote.id, { status: 'accepted' })
-    toast({
-      title: 'Invoice created',
-      description: 'Quote has been converted to an invoice.',
-    })
-    setConvertQuoteId(null)
   }
 
   const getStatusBadge = (status: Quote['status']) => {
@@ -133,6 +206,14 @@ export default function Quotes() {
       rejected: 'destructive',
     }
     return <Badge variant={variants[status] || 'default'}>{status}</Badge>
+  }
+
+  if (companyLoading || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (
@@ -152,6 +233,15 @@ export default function Quotes() {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <QuoteForm
               quote={editingQuote}
+              company={company!}
+              clients={clients}
+              taxRates={taxRates}
+              onSaved={(saved) => {
+                setQuotes((prev) => {
+                  const exists = prev.some((q) => q.id === saved.id)
+                  return exists ? prev.map((q) => (q.id === saved.id ? saved : q)) : [saved, ...prev]
+                })
+              }}
               onClose={() => {
                 setIsDialogOpen(false)
                 setEditingQuote(null)
@@ -218,31 +308,19 @@ export default function Quotes() {
                     <TableCell>{formatDateShort(quote.validUntil)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          asChild
-                        >
+                        <Button variant="ghost" size="icon" asChild>
                           <Link to={`/quotes/${quote.id}/preview`}>
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDownloadPDF(quote)}
-                        >
-                          <FileDown className="h-4 w-4" />
-                        </Button>
                         {quote.status === 'accepted' && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setConvertQuoteId(quote.id)}
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => setConvertQuoteId(quote.id)}>
                             <ArrowRight className="h-4 w-4" />
                           </Button>
                         )}
+                        <Button variant="ghost" size="icon" onClick={() => handleDownloadPDF(quote)}>
+                          <FileDown className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -253,11 +331,7 @@ export default function Quotes() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteQuoteId(quote.id)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteQuoteId(quote.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
@@ -281,13 +355,23 @@ export default function Quotes() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                if (deleteQuoteId) {
-                  deleteQuote(deleteQuoteId)
+              onClick={async () => {
+                if (!deleteQuoteId) return
+                try {
+                  await deleteQuote(deleteQuoteId)
+                  setQuotes((prev) => prev.filter((q) => q.id !== deleteQuoteId))
                   toast({
                     title: 'Quote deleted',
                     description: 'Quote has been deleted successfully.',
                   })
+                } catch (error) {
+                  console.error('Error deleting quote:', error)
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to delete quote',
+                    variant: 'destructive',
+                  })
+                } finally {
                   setDeleteQuoteId(null)
                 }
               }}
@@ -319,8 +403,21 @@ export default function Quotes() {
   )
 }
 
-function QuoteForm({ quote, onClose }: { quote: Quote | null; onClose: () => void }) {
-  const { clients, quotes, addQuote, updateQuote, settings } = useStore()
+function QuoteForm({
+  quote,
+  company,
+  clients,
+  taxRates,
+  onClose,
+  onSaved,
+}: {
+  quote: Quote | null
+  company: Database['public']['Tables']['companies']['Row']
+  clients: Client[]
+  taxRates: Database['public']['Tables']['tax_rates']['Row'][]
+  onClose: () => void
+  onSaved: (quote: Quote) => void
+}) {
   const { toast } = useToast()
   const [clientId, setClientId] = useState(quote?.clientId || '')
   const [date, setDate] = useState(quote?.date || new Date().toISOString().split('T')[0])
@@ -335,7 +432,7 @@ function QuoteForm({ quote, onClose }: { quote: Quote | null; onClose: () => voi
         description: '',
         quantity: 1,
         unitPrice: 0,
-        taxRate: settings.taxRates.find((t) => t.default)?.rate || 20,
+        taxRate: taxRates.find((t) => t.is_default)?.rate || 20,
       },
     ]
   )
@@ -358,7 +455,7 @@ function QuoteForm({ quote, onClose }: { quote: Quote | null; onClose: () => voi
         description: '',
         quantity: 1,
         unitPrice: 0,
-        taxRate: settings.taxRates.find((t) => t.default)?.rate || 20,
+        taxRate: taxRates.find((t) => t.is_default)?.rate || 20,
       },
     ])
   }
@@ -368,12 +465,10 @@ function QuoteForm({ quote, onClose }: { quote: Quote | null; onClose: () => voi
   }
 
   const handleLineItemChange = (id: string, field: keyof LineItem, value: string | number) => {
-    setLineItems(
-      lineItems.map((item) => (item.id === id ? { ...item, [field]: value } : item))
-    )
+    setLineItems(lineItems.map((item) => (item.id === id ? { ...item, [field]: value } : item)))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!clientId) {
       toast({
@@ -384,34 +479,63 @@ function QuoteForm({ quote, onClose }: { quote: Quote | null; onClose: () => voi
       return
     }
 
-    const quoteData: Quote = {
-      id: quote?.id || `q-${Date.now()}`,
-      quoteNumber: quote?.quoteNumber || `QUO-${String(quotes.length + 1).padStart(4, '0')}`,
-      clientId,
-      date,
-      validUntil,
-      status,
-      lineItems,
-      subtotal: calculations.subtotal,
-      taxAmount: calculations.taxAmount,
-      total: calculations.total,
-      notes: notes || undefined,
-    }
-
-    if (quote) {
-      updateQuote(quote.id, quoteData)
+    try {
+      if (quote) {
+        const updated = await updateQuote(
+          quote.id,
+          {
+            client_id: clientId,
+            date,
+            valid_until: validUntil,
+            status,
+            subtotal: calculations.subtotal,
+            tax_amount: calculations.taxAmount,
+            total: calculations.total,
+            notes: notes || null,
+            terms: null,
+          },
+          appLineItemsToQuoteItems(lineItems)
+        )
+        onSaved(dbQuoteToApp(updated))
+        toast({
+          title: 'Quote updated',
+          description: 'Quote has been updated successfully.',
+        })
+      } else {
+        const nextNumber = await getNextQuoteNumber(company.id, company.quote_prefix)
+        const quoteNumber = `${company.quote_prefix}${String(nextNumber).padStart(4, '0')}`
+        const created = await createQuote(
+          {
+            company_id: company.id,
+            client_id: clientId,
+            status,
+            date,
+            valid_until: validUntil,
+            subtotal: calculations.subtotal,
+            tax_amount: calculations.taxAmount,
+            total: calculations.total,
+            notes: notes || null,
+            terms: null,
+            created_by: null,
+          },
+          appLineItemsToQuoteItems(lineItems),
+          quoteNumber
+        )
+        onSaved(dbQuoteToApp(created))
+        toast({
+          title: 'Quote created',
+          description: 'Quote has been created successfully.',
+        })
+      }
+      onClose()
+    } catch (error) {
+      console.error('Error saving quote:', error)
       toast({
-        title: 'Quote updated',
-        description: 'Quote has been updated successfully.',
-      })
-    } else {
-      addQuote(quoteData)
-      toast({
-        title: 'Quote created',
-        description: 'Quote has been created successfully.',
+        title: 'Error',
+        description: 'Failed to save quote',
+        variant: 'destructive',
       })
     }
-    onClose()
   }
 
   return (
