@@ -6,10 +6,13 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
+  // Format with space as thousands separator and MAD suffix
+  const formatted = new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
   }).format(amount)
+  
+  return `${formatted} MAD`
 }
 
 export function formatDate(date: Date | string): string {
