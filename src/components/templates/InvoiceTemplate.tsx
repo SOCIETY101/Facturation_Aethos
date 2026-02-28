@@ -25,6 +25,8 @@ interface InvoiceTemplateProps {
   }
   client: Client
   company: Company
+  /** Compact layout for PDF (single page, less empty space) */
+  compact?: boolean
 }
 
 const formatDateNumeric = (date: string | Date) => {
@@ -36,9 +38,9 @@ const formatDateNumeric = (date: string | Date) => {
   }).format(d)
 }
 
-export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplateProps) {
+export function InvoiceTemplate({ invoice, client, company, compact }: InvoiceTemplateProps) {
   return (
-    <div className="min-h-screen bg-white p-10 print:p-6 text-[#2b2b2b] relative">
+    <div className={`bg-white p-10 print:p-6 text-[#2b2b2b] relative ${compact ? 'min-h-0' : 'min-h-screen'}`}>
       <img
         src={Favicon}
         alt=""
@@ -48,35 +50,33 @@ export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplatePro
       <div className="max-w-4xl mx-auto relative z-10">
         {/* Logo */}
         <div className="flex items-start justify-between">
-        <div className="flex items-start justify-between">
           <div className="flex items-start gap-4">
             {company.logo_url ? (
                <img
                 src={company.logo_url}
                 alt={company.name || 'Logo'}
-                className="h-[100px] w-auto object-contain"
+                className="h-[140px] w-auto object-contain"
               />
             ) : (
               <img
                 src={Logo}
                 alt="Logo"
-                className="h-[100px] w-auto object-contain"
+                className="h-[140px] w-auto object-contain"
               />
             )}
           </div>
         </div>
-        </div>
 
-        {/* Title Row */}
-        <div className="mt-4 flex items-center gap-4">
-          <span className="text-[28px] font-bold tracking-wider mr-2">
+        {/* Title Row - FACTURE and N° aligned */}
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <span className="text-[28px] font-bold tracking-wider leading-tight">
             FACTURE
           </span>
-          <span className="border border-gray-400 rounded-full px-5 py-1 text-[15px] font-medium text-gray-800">
+          <span className="inline-flex items-center border border-gray-400 rounded-full px-5 py-1.5 text-[15px] font-medium text-gray-800">
             N°{invoice.invoice_number}
           </span>
-          <div className="ml-auto">
-            <span className="bg-[#990a0a] text-white rounded-[20px] px-6 py-2 text-[15px] font-bold tracking-wide">
+          <div className="ml-auto flex items-center">
+            <span className="inline-flex items-center bg-[#990a0a] text-white rounded-[20px] px-6 py-2 text-[15px] font-bold tracking-wide">
               {formatDateNumeric(invoice.date)}
             </span>
           </div>
@@ -100,7 +100,7 @@ export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplatePro
         </div>
 
         {/* Line Items */}
-        <div className="mt-10 min-h-[400px] flex flex-col border border-[#2b2b2b] bg-white">
+        <div className={`mt-10 flex flex-col border border-[#2b2b2b] bg-white ${compact ? 'min-h-0' : 'min-h-[120px]'}`}>
           <div className="flex bg-[#1a1a1a] text-white">
             <div className="flex-1 px-4 py-3 text-center font-bold tracking-wide border-r border-[#2b2b2b]">DESCRIPTION</div>
             <div className="w-[250px] px-4 py-3 text-center font-bold tracking-wide">TOTAL TTC</div>
@@ -155,7 +155,7 @@ export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplatePro
         </div>
 
         {/* Payment Mode */}
-        <div className="mt-16 text-[16px] leading-[1.7]">
+        <div className={`text-[16px] leading-[1.7] ${compact ? 'mt-8' : 'mt-16'}`}>
           <div className="font-bold uppercase mb-2 tracking-wide text-[#1a1a1a]">INTITULÉ DU COMPTE : {company.name || 'STE AETHOS TECH SARL'}</div>
           {(company.bank_account) && (
             <div className="font-bold uppercase mb-1 text-[#1a1a1a]">
@@ -171,7 +171,7 @@ export function InvoiceTemplate({ invoice, client, company }: InvoiceTemplatePro
         </div>
 
         {/* Footer */}
-        <div className="mt-20 pt-4 border-t border-[#2b2b2b]/40 text-xs text-center font-medium leading-relaxed">
+        <div className={`pt-4 border-t border-[#2b2b2b]/40 text-xs text-center font-medium leading-relaxed ${compact ? 'mt-8' : 'mt-20'}`}>
           STE AETHOS TECH SARL - ICE N°003619027000094 - RC N°156509 - Siège Social : <br/>
           AV AL QODS L IMCOPA LT 2 1ER ETG N 5 AOUAMA , Tanger - Capital Social(Devise) : 100000,00 MAD
         </div>

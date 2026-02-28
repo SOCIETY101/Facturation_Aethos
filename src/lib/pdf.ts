@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 import { Invoice, Quote, Client, AppSettings } from './types'
 import Logo from '@/assets/logonor.png'
 import Favicon from '@/assets/faviconaethos.png'
@@ -296,6 +297,60 @@ export async function generateInvoicePDF(
   doc.text('AV AL QODS L IMCOPA LT 2 1ER ETG N 5 AOUAMA , Tanger - Capital Social(Devise) : 100000,00 MAD', pageWidth / 2, pageHeight - 8, { align: 'center' })
 
   doc.save(`invoice-${invoice.invoiceNumber}.pdf`)
+}
+
+/** Generate PDF from HTML element - matches preview exactly (pixel-perfect) */
+export async function generateInvoicePDFFromElement(
+  element: HTMLElement,
+  filename: string
+): Promise<void> {
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#ffffff',
+    logging: false,
+    windowWidth: element.scrollWidth,
+    windowHeight: element.scrollHeight,
+  })
+
+  const pdf = new jsPDF('p', 'pt', 'a4')
+  const pdfWidth = pdf.internal.pageSize.getWidth()
+  const pdfHeight = pdf.internal.pageSize.getHeight()
+  const imgData = canvas.toDataURL('image/png')
+
+  // Scale to fit single page when content is not too tall (avoids unnecessary 2nd page)
+  const naturalImgHeight = (canvas.height * pdfWidth) / canvas.width
+  const fitsOnePage = naturalImgHeight <= pdfHeight
+
+  if (fitsOnePage) {
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, naturalImgHeight)
+  } else if (naturalImgHeight <= pdfHeight * 1.15) {
+    // Slightly over: scale down to fit on 1 page
+    const scale = pdfHeight / naturalImgHeight
+    const scaledWidth = pdfWidth * scale
+    const scaledHeight = pdfHeight
+    const xOffset = (pdfWidth - scaledWidth) / 2
+    pdf.addImage(imgData, 'PNG', xOffset, 0, scaledWidth, scaledHeight)
+  } else {
+    // Much taller: split across pages
+    const imgWidth = pdfWidth
+    const imgHeight = naturalImgHeight
+    let heightLeft = imgHeight
+    let position = 0
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+    heightLeft -= pdfHeight
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight
+      pdf.addPage()
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+      heightLeft -= pdfHeight
+    }
+  }
+
+  pdf.save(filename)
 }
 
 export async function generateQuotePDF(

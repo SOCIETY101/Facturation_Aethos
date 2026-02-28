@@ -111,7 +111,6 @@ export default function Clients() {
       if (editingClient) {
         const updated = await updateClient(editingClient.id, {
           name: clientData.name,
-          nom: clientData.name,
           email: clientData.email || null,
           phone: clientData.phone || null,
           address: clientData.address || null,

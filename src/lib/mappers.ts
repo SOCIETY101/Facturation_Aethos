@@ -84,7 +84,6 @@ export const appClientToInsert = (
 ): DbClientInsert & { user_id?: string } => ({
   company_id: companyId,
   name: client.name || '',
-  nom: client.name || '',
   email: client.email || null,
   phone: client.phone || null,
   address: client.address || null,

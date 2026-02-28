@@ -1,12 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { InvoiceTemplate } from '@/components/templates/InvoiceTemplate'
 import { getInvoice } from '@/lib/api/invoices'
 import { getCompanyByUserId } from '@/lib/api/company'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Download, Printer } from 'lucide-react'
-import { generateInvoicePDF } from '@/lib/pdf'
+import { generateInvoicePDFFromElement } from '@/lib/pdf'
 import { Database } from '@/lib/supabase'
 
 type Invoice = Database['public']['Tables']['invoices']['Row'] & {
@@ -19,6 +19,7 @@ export default function InvoicePreview() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const invoiceRef = useRef<HTMLDivElement>(null)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [company, setCompany] = useState<Database['public']['Tables']['companies']['Row'] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -45,70 +46,12 @@ export default function InvoicePreview() {
   }, [id, user])
 
   const handleDownloadPDF = async () => {
-    if (!invoice || !company) return
+    if (!invoice || !company || !invoiceRef.current) return
 
-    // Convert database format to app format for PDF generation
-    const client = invoice.clients
-    const appInvoice = {
-      id: invoice.id,
-      invoiceNumber: invoice.invoice_number,
-      clientId: invoice.client_id,
-      date: invoice.date,
-      dueDate: invoice.due_date,
-      status: invoice.status as any,
-      lineItems: invoice.invoice_items.map((item) => ({
-        id: item.id,
-        description: item.description,
-        quantity: Number(item.quantity),
-        unitPrice: Number(item.unit_price),
-        taxRate: Number(item.tax_rate),
-      })),
-      subtotal: Number(invoice.subtotal),
-      taxAmount: Number(invoice.tax_amount),
-      total: Number(invoice.total),
-      notes: invoice.notes || undefined,
-      payments: invoice.payments?.map((p) => ({
-        id: p.id,
-        date: p.payment_date,
-        amount: Number(p.amount),
-        method: p.payment_method as any,
-        reference: p.reference || undefined,
-      })) || [],
-    }
-
-    const appClient = {
-      id: client.id,
-      name: client.name,
-      email: client.email || '',
-      phone: client.phone || '',
-      address: client.address || '',
-      taxId: client.tax_id || undefined,
-      createdAt: client.created_at,
-    }
-
-    const appSettings = {
-      company: {
-        name: company.name,
-        logo: company.logo_url || undefined,
-        address: company.address || '',
-        city: company.city || '',
-        postalCode: company.postal_code || '',
-        country: company.country || '',
-        taxId: company.tax_id || '',
-        bankName: company.bank_name || '',
-        bankAccount: company.bank_account || '',
-        bankIBAN: company.bank_iban || '',
-        bankBIC: company.bank_bic || '',
-      },
-      invoice: {
-        prefix: company.invoice_prefix,
-        startingNumber: company.invoice_start_number,
-        terms: company.default_payment_terms || '',
-      },
-      taxRates: [],
-    }
-
-    await generateInvoicePDF(appInvoice, appClient, appSettings)
+    await generateInvoicePDFFromElement(
+      invoiceRef.current,
+      `invoice-${invoice.invoice_number}.pdf`
+    )
   }
 
   if (loading) {
@@ -152,8 +95,13 @@ export default function InvoicePreview() {
         </div>
       </div>
 
-      {/* Template */}
-      <InvoiceTemplate
+      {/* Template - fixed A4 width for consistent PDF capture */}
+      <div
+        ref={invoiceRef}
+        className="bg-white"
+        style={{ width: '210mm', minWidth: '210mm', margin: '0 auto' }}
+      >
+        <InvoiceTemplate
         invoice={{
           invoice_number: invoice.invoice_number,
           date: invoice.date,
@@ -171,6 +119,7 @@ export default function InvoicePreview() {
         client={invoice.clients}
         company={company}
       />
+      </div>
     </div>
   )
 }

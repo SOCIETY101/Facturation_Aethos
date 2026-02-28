@@ -32,8 +32,8 @@ import { Plus, Search, Edit, Trash2, FileDown, DollarSign, Eye } from 'lucide-re
 import { Link } from 'react-router-dom'
 import { formatCurrency, formatDateShort } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { Invoice, LineItem, Payment, Quote, Client, AppSettings } from '@/lib/types'
-import { generateInvoicePDF } from '@/lib/pdf'
+import { Invoice, LineItem, Payment, Quote, Client } from '@/lib/types'
+import { InvoicePDFCapture } from '@/components/InvoicePDFCapture'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -67,6 +67,7 @@ export default function Invoices() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null)
   const [paymentInvoiceId, setPaymentInvoiceId] = useState<string | null>(null)
+  const [pdfCaptureInvoice, setPdfCaptureInvoice] = useState<Invoice | null>(null)
 
   useEffect(() => {
     if (!company) return
@@ -109,7 +110,7 @@ export default function Invoices() {
     return filtered
   }, [invoices, statusFilter, searchQuery, clients])
 
-  const handleDownloadPDF = async (invoice: Invoice) => {
+  const handleDownloadPDF = (invoice: Invoice) => {
     const client = clients.find((c) => c.id === invoice.clientId)
     if (!client) {
       toast({
@@ -121,29 +122,11 @@ export default function Invoices() {
     }
     if (!company) return
 
-    const settings: AppSettings = {
-      company: {
-        name: company.name,
-        logo: company.logo_url || undefined,
-        address: company.address || '',
-        city: company.city || '',
-        postalCode: company.postal_code || '',
-        country: company.country || '',
-        taxId: company.tax_id || '',
-        bankName: company.bank_name || '',
-        bankAccount: company.bank_account || '',
-        bankIBAN: company.bank_iban || '',
-        bankBIC: company.bank_bic || '',
-      },
-      invoice: {
-        prefix: company.invoice_prefix,
-        startingNumber: company.invoice_start_number,
-        terms: company.default_payment_terms || '',
-      },
-      taxRates: [],
-    }
+    setPdfCaptureInvoice(invoice)
+  }
 
-    await generateInvoicePDF(invoice, client, settings)
+  const handlePdfCaptureComplete = () => {
+    setPdfCaptureInvoice(null)
     toast({
       title: 'PDF generated',
       description: 'Invoice PDF has been downloaded.',
@@ -374,6 +357,15 @@ export default function Invoices() {
           invoice={invoices.find((inv) => inv.id === paymentInvoiceId)!}
           onClose={() => setPaymentInvoiceId(null)}
           onSave={handleAddPayment}
+        />
+      )}
+
+      {pdfCaptureInvoice && company && (
+        <InvoicePDFCapture
+          invoice={pdfCaptureInvoice}
+          client={clients.find((c) => c.id === pdfCaptureInvoice.clientId)!}
+          company={company}
+          onComplete={handlePdfCaptureComplete}
         />
       )}
     </div>
