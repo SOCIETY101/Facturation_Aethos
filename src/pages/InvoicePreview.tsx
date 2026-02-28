@@ -97,8 +97,8 @@ export default function InvoicePreview() {
         taxId: company.tax_id || '',
         bankName: company.bank_name || '',
         bankAccount: company.bank_account || '',
-        bankIBAN: company.bank_account || '',
-        bankBIC: company.bank_account || '',
+        bankIBAN: company.bank_iban || '',
+        bankBIC: company.bank_bic || '',
       },
       invoice: {
         prefix: company.invoice_prefix,
