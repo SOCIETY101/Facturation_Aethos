@@ -181,7 +181,7 @@ export type Database = {
         Row: {
           id: string
           company_id: string
-          client_id: string
+          client_id: string | null
           stage_id: string
           owner_id: string | null
           name: string
@@ -203,7 +203,7 @@ export type Database = {
         Row: {
           id: string
           company_id: string
-          client_id: string
+          client_id: string | null
           deal_id: string | null
           contact_id: string | null
           type: 'note' | 'call' | 'meeting' | 'email' | 'system'

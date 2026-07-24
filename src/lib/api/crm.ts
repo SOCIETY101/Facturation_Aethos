@@ -14,7 +14,7 @@ export type CrmTaskInsert = Database['public']['Tables']['crm_tasks']['Insert']
 type ClientSummary = Pick<Database['public']['Tables']['clients']['Row'], 'id' | 'name' | 'email' | 'phone'>
 
 export interface DealWithRelations extends Deal {
-  clients: ClientSummary
+  clients: ClientSummary | null
   deal_stages: DealStage
 }
 
