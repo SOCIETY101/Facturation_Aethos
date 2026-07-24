@@ -17,6 +17,9 @@ import ForgotPassword from '@/pages/ForgotPassword'
 import ResetPassword from '@/pages/ResetPassword'
 import InvoicePreview from '@/pages/InvoicePreview'
 import QuotePreview from '@/pages/QuotePreview'
+import CRM from '@/pages/CRM'
+import CRMWork from '@/pages/CRMWork'
+import CRMAccount from '@/pages/CRMAccount'
 
 function AppRoutes() {
   const { user, loading } = useAuth()
@@ -52,6 +55,9 @@ function AppRoutes() {
       >
         <Route index element={<Dashboard />} />
         <Route path="clients" element={<Clients />} />
+        <Route path="crm" element={<CRM />} />
+        <Route path="crm/work" element={<CRMWork />} />
+        <Route path="crm/accounts/:clientId" element={<CRMAccount />} />
         <Route path="quotes" element={<Quotes />} />
         <Route path="quotes/:id/preview" element={<QuotePreview />} />
         <Route path="invoices" element={<Invoices />} />

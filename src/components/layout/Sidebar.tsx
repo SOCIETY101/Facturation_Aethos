@@ -8,6 +8,8 @@ import {
   Menu,
   X,
   FileCheck,
+  Briefcase,
+  ListTodo,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -17,6 +19,8 @@ import logoImage from '@/assets/Logo.png'
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Clients', href: '/clients', icon: Users },
+  { name: 'Pipeline', href: '/crm', icon: Briefcase },
+  { name: 'My work', href: '/crm/work', icon: ListTodo },
   { name: 'Quotes', href: '/quotes', icon: FileText },
   { name: 'Invoices', href: '/invoices', icon: Receipt },
   { name: 'Templates', href: '/templates', icon: FileCheck },

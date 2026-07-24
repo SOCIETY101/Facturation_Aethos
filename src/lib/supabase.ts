@@ -126,6 +126,7 @@ export type Database = {
           id: string
           company_id: string
           client_id: string
+          deal_id: string | null
           quote_number: string
           status: string
           date: string
@@ -139,8 +140,102 @@ export type Database = {
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['quotes']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['quotes']['Row'], 'id' | 'created_at' | 'updated_at' | 'deal_id'> & { deal_id?: string | null }
         Update: Partial<Database['public']['Tables']['quotes']['Insert']>
+      }
+      contacts: {
+        Row: {
+          id: string
+          company_id: string
+          client_id: string
+          first_name: string
+          last_name: string | null
+          email: string | null
+          phone: string | null
+          title: string | null
+          is_primary: boolean
+          notes: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['contacts']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['contacts']['Insert']>
+      }
+      deal_stages: {
+        Row: {
+          id: string
+          company_id: string
+          name: string
+          color: string
+          position: number
+          probability: number
+          is_closed: boolean
+          is_won: boolean
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['deal_stages']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['deal_stages']['Insert']>
+      }
+      deals: {
+        Row: {
+          id: string
+          company_id: string
+          client_id: string
+          stage_id: string
+          owner_id: string | null
+          name: string
+          description: string | null
+          amount: number
+          expected_close_date: string | null
+          probability: number
+          source: string | null
+          status: 'open' | 'won' | 'lost'
+          lost_reason: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['deals']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['deals']['Insert']>
+      }
+      crm_activities: {
+        Row: {
+          id: string
+          company_id: string
+          client_id: string
+          deal_id: string | null
+          contact_id: string | null
+          type: 'note' | 'call' | 'meeting' | 'email' | 'system'
+          subject: string
+          body: string | null
+          occurred_at: string
+          created_by: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['crm_activities']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['crm_activities']['Insert']>
+      }
+      crm_tasks: {
+        Row: {
+          id: string
+          company_id: string
+          client_id: string | null
+          deal_id: string | null
+          contact_id: string | null
+          assignee_id: string | null
+          title: string
+          description: string | null
+          due_date: string | null
+          priority: 'low' | 'medium' | 'high'
+          status: 'open' | 'completed' | 'cancelled'
+          completed_at: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['crm_tasks']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['crm_tasks']['Insert']>
       }
       quote_items: {
         Row: {
