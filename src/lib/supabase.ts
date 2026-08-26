@@ -147,7 +147,8 @@ export type Database = {
         Row: {
           id: string
           company_id: string
-          client_id: string
+          client_id: string | null
+          account_id: string | null
           first_name: string
           last_name: string | null
           email: string | null
@@ -155,11 +156,12 @@ export type Database = {
           title: string | null
           is_primary: boolean
           notes: string | null
+          import_key: string | null
           created_by: string | null
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['contacts']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['contacts']['Row'], 'id' | 'created_at' | 'updated_at' | 'account_id' | 'import_key'> & { account_id?: string | null; import_key?: string | null }
         Update: Partial<Database['public']['Tables']['contacts']['Insert']>
       }
       deal_stages: {
@@ -182,6 +184,7 @@ export type Database = {
           id: string
           company_id: string
           client_id: string | null
+          account_id: string | null
           stage_id: string
           owner_id: string | null
           name: string
@@ -192,11 +195,35 @@ export type Database = {
           source: string | null
           status: 'open' | 'won' | 'lost'
           lost_reason: string | null
+          priority: 'low' | 'medium' | 'high'
+          last_contact_at: string | null
+          next_follow_up_at: string | null
+          next_action: string | null
+          proposal_sent_at: string | null
+          proposal_reference: string | null
+          original_budget_text: string | null
+          outcome_blocker: string | null
+          source_evidence: string | null
+          data_gaps: string | null
+          import_key: string | null
           created_by: string | null
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['deals']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['deals']['Row'], 'id' | 'created_at' | 'updated_at' | 'account_id' | 'priority' | 'last_contact_at' | 'next_follow_up_at' | 'next_action' | 'proposal_sent_at' | 'proposal_reference' | 'original_budget_text' | 'outcome_blocker' | 'source_evidence' | 'data_gaps' | 'import_key'> & {
+          account_id?: string | null
+          priority?: 'low' | 'medium' | 'high'
+          last_contact_at?: string | null
+          next_follow_up_at?: string | null
+          next_action?: string | null
+          proposal_sent_at?: string | null
+          proposal_reference?: string | null
+          original_budget_text?: string | null
+          outcome_blocker?: string | null
+          source_evidence?: string | null
+          data_gaps?: string | null
+          import_key?: string | null
+        }
         Update: Partial<Database['public']['Tables']['deals']['Insert']>
       }
       crm_activities: {
@@ -204,6 +231,7 @@ export type Database = {
           id: string
           company_id: string
           client_id: string | null
+          account_id: string | null
           deal_id: string | null
           contact_id: string | null
           type: 'note' | 'call' | 'meeting' | 'email' | 'system'
@@ -213,7 +241,7 @@ export type Database = {
           created_by: string | null
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['crm_activities']['Row'], 'id' | 'created_at'>
+        Insert: Omit<Database['public']['Tables']['crm_activities']['Row'], 'id' | 'created_at' | 'account_id'> & { account_id?: string | null }
         Update: Partial<Database['public']['Tables']['crm_activities']['Insert']>
       }
       crm_tasks: {
@@ -221,6 +249,7 @@ export type Database = {
           id: string
           company_id: string
           client_id: string | null
+          account_id: string | null
           deal_id: string | null
           contact_id: string | null
           assignee_id: string | null
@@ -230,12 +259,76 @@ export type Database = {
           priority: 'low' | 'medium' | 'high'
           status: 'open' | 'completed' | 'cancelled'
           completed_at: string | null
+          import_key: string | null
           created_by: string | null
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['crm_tasks']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['crm_tasks']['Row'], 'id' | 'created_at' | 'updated_at' | 'account_id' | 'import_key'> & { account_id?: string | null; import_key?: string | null }
         Update: Partial<Database['public']['Tables']['crm_tasks']['Insert']>
+      }
+      crm_accounts: {
+        Row: {
+          id: string
+          company_id: string
+          client_id: string | null
+          name: string
+          relationship_type: 'prospect' | 'active_client' | 'client_project' | 'former_client' | 'reference'
+          lifecycle_status: 'active' | 'customer' | 'on_hold' | 'nurture' | 'past_customer' | 'reference' | 'lost'
+          source_stage: string | null
+          industry: string | null
+          country: string | null
+          city: string | null
+          website: string | null
+          services_need: string | null
+          original_budget_text: string | null
+          outcome_blocker: string | null
+          source_evidence: string | null
+          data_gaps: string | null
+          notes: string | null
+          last_contact_at: string | null
+          next_follow_up_at: string | null
+          next_action: string | null
+          meeting_date: string | null
+          proposal_sent: boolean
+          proposal_date: string | null
+          proposal_reference: string | null
+          priority: 'low' | 'medium' | 'high'
+          import_source: string | null
+          source_row: number | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['crm_accounts']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['crm_accounts']['Insert']>
+      }
+      crm_import_runs: {
+        Row: {
+          id: string
+          company_id: string
+          source: string
+          source_url: string | null
+          imported_records: number
+          imported_by: string | null
+          imported_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['crm_import_runs']['Row'], 'id' | 'imported_at'>
+        Update: Partial<Database['public']['Tables']['crm_import_runs']['Insert']>
+      }
+      crm_deal_stage_history: {
+        Row: {
+          id: string
+          company_id: string
+          deal_id: string
+          from_stage_id: string | null
+          to_stage_id: string
+          changed_by: string | null
+          change_source: string
+          changed_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['crm_deal_stage_history']['Row'], 'id' | 'changed_at' | 'change_source'> & { change_source?: string }
+        Update: never
       }
       quote_items: {
         Row: {

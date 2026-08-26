@@ -54,7 +54,62 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    font-optical-sizing: auto;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+@layer components {
+  .font-crm-display {
+    font-family: "Iowan Old Style", "New York", "Palatino Linotype", ui-serif, Georgia, serif;
+    font-optical-sizing: auto;
+  }
+
+  .crm-workspace {
+    background:
+      radial-gradient(circle at 12% -8%, rgba(160, 48, 42, 0.075), transparent 31rem),
+      radial-gradient(circle at 88% 4%, rgba(177, 158, 133, 0.11), transparent 27rem),
+      #f4f1ed;
+  }
+
+  .crm-press {
+    -webkit-tap-highlight-color: transparent;
+    transition-property: transform, background-color, color, border-color, box-shadow, opacity;
+    transition-duration: 160ms;
+    transition-timing-function: cubic-bezier(.23, 1, .32, 1);
+  }
+
+  .crm-press:active {
+    transform: scale(.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  .crm-press:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: #fbfaf8 !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .crm-workspace {
+    background: #f7f5f2;
   }
 }
 
@@ -75,14 +130,6 @@
   
   .print\\:p-4 {
     padding: 1rem !important;
-  }
-  
-  /* Ensure colors print */
-  .bg-\\[\\#1e3a8a\\] {
-    background-color: #1e3a8a !important;
-    color: white !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
   }
   
   /* Ensure borders print */
